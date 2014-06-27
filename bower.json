@@ -18,9 +18,9 @@
   "license": "Apache 2.0",
   "homepage": "http://rtc.io/",
   "ignore": [
-    "**/.*",
     "node_modules",
     "bower_components",
+    "examples",
     "test",
     "tests"
   ]
