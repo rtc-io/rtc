@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "gendocs": "gendocs > README.md"
   },
   "repository": {
     "type": "git",
@@ -19,5 +20,12 @@
   "bugs": {
     "url": "https://github.com/rtc-io/rtc/issues"
   },
-  "homepage": "https://github.com/rtc-io/rtc"
+  "homepage": "https://github.com/rtc-io/rtc",
+  "dependencies": {
+    "cog": "^0.5.3",
+    "crel": "^1.1.2",
+    "rtc-captureconfig": "^1.0.0",
+    "rtc-media": "^1.6.6",
+    "rtc-quickconnect": "^1.0.5"
+  }
 }
