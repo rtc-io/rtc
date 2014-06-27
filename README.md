@@ -28,6 +28,8 @@ __NOTE:__ I would strongly recommend using NPM for your managing your applicatio
 
 ## Example Usage
 
+Displayed below is a very simple example of using the `rtc` module to build a simple video conferencing app:
+
 ```js
 var rtc = require('rtc');
 
@@ -41,6 +43,8 @@ document.body.appendChild(session.local);
 document.body.appendChild(session.remote);
 
 ```
+
+
 
 ## License(s)
 

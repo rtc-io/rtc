@@ -21,7 +21,7 @@ var DEFAULT_CONSTRAINTS = { video: true, audio: true };
 
   ## Example Usage
 
-  <<< examples/simple.js
+  <<< docs/examples.md
 
 **/
 
