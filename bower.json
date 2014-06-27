@@ -1,0 +1,27 @@
+{
+  "name": "rtc",
+  "main": "dist/rtc.js",
+  "version": "2.0.0",
+  "authors": [
+    "Damon Oehlman <damon.oehlman@nicta.com.au>"
+  ],
+  "description": "Build WebRTC conferencing applications with easy using rtc.io. This package provides a super-friendly entry point for working with WebRTC, dive into underling rtc.io modules for more configuration and customization opportunities",
+  "moduleType": [
+    "amd",
+    "globals",
+    "node"
+  ],
+  "keywords": [
+    "webrtc",
+    "rtc.io"
+  ],
+  "license": "Apache 2.0",
+  "homepage": "http://rtc.io/",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}
