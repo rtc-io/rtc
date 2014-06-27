@@ -21,7 +21,7 @@ var DEFAULT_CONSTRAINTS = { video: true, audio: true };
 
   ## Example Usage
 
-  <<< examples/connect.js
+  <<< examples/simple.js
 
 **/
 
@@ -29,20 +29,63 @@ module.exports = function(opts) {
   var rtc = new EventEmitter();
   var constraints = [].concat((opts || {}).capture || [ DEFAULT_CONSTRAINTS ]);
   var plugins = (opts || {}).plugins || [];
+  var signalhost = (opts || {}).signaller || '//switchboard.rtc.io';
   var localStreams = [];
+  var localVideo;
+  var remoteVideo;
 
   // capture media
   var captureTargets = constraints.map(parseConstraints).map(function(constraints) {
     return media({ constraints: constraints, plugins: plugins });
   });
 
+  function announce() {
+    // create the signaller
+    var signaller = rtc.signaller = quickconnect(signalhost, opts);
+
+    signaller
+      .on('call:started', handleCallStart)
+      .on('call:ended', handleCallEnd);
+
+    // add the local streams
+    localStreams.forEach(function(stream) {
+      signaller.addStream(stream);
+    });
+
+    // emit a ready event for the rtc
+    rtc.emit('ready');
+  }
+
   function gotLocalStream(stream) {
+    media({ stream: stream, plugins: plugins, muted: true }).render(localVideo);
+
     localStreams.push(stream);
     if (localStreams.length >= captureTargets.length) {
-      console.log('got enough stuff to connect');
+      announce();
     }
+  }
 
-    media({ stream: stream, plugins: plugins, muted: true }).render(rtc.localVideo);
+  function handleCallStart(id, pc, data) {
+    // create the container for this peers streams
+    var container = crel('div', {
+      class: 'rtc-peer',
+      'data-peerid': id
+    });
+
+    console.log('call started with peer: ' + id);
+    pc.getRemoteStreams().forEach(function(stream) {
+      media({ stream: stream, plugins: plugins }).render(container);
+    });
+
+    remoteVideo.appendChild(container);
+  }
+
+  function handleCallEnd(id, pc, data) {
+    var el = remoteVideo.querySelector('div[data-peerid="' + id + '"]');
+
+    if (el) {
+      el.parentNode.removeChild(el);
+    }
   }
 
   function parseConstraints(input) {
@@ -59,11 +102,14 @@ module.exports = function(opts) {
   });
 
   // create the local container
-  rtc.localVideo = crel('div')
+  localVideo = rtc.local = crel('div', {
+    class: 'rtc-media rtc-localvideo'
+  });
 
   // create the remote container
-  rtc.remoteVideo = crel('div');
-
+  remoteVideo = rtc.remote = crel('div', {
+    class: 'rtc-media rtc-remotevideo'
+  });
 
   return rtc;
 }
