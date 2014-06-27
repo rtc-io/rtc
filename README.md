@@ -31,23 +31,14 @@ __NOTE:__ I would strongly recommend using NPM for your managing your applicatio
 ```js
 var rtc = require('rtc');
 
-var session = rtc({
-  signaller: 'http://rtc.io/switchboard/',
-  room: 'test-room',
-
-  // specify any plugins we wish to use (iOS, temasys, etc)
-  plugins: [
-  ],
-
-  // specify what we want to capture locally
-  capture: { video: true, audio: true }
-});
+// prime a session
+var session = rtc({ room: 'test-room' });
 
 // add a div (class="rtc-media rtc-localvideo") to the DOM
-document.body.appendChild(session.localVideo);
+document.body.appendChild(session.local);
 
 // add a div (class="rtc-media rtc-remotevideo") to the DOM
-document.body.appendChild(session.remoteVideo);
+document.body.appendChild(session.remote);
 
 ```
 
