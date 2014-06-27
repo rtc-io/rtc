@@ -18,6 +18,11 @@ var DEFAULT_CONSTRAINTS = { video: true, audio: true };
   ## Getting Started
 
   <<< docs/getting-started.md
+
+  ## Example Usage
+
+  <<< examples/connect.js
+
 **/
 
 module.exports = function(opts) {
