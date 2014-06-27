@@ -12,4 +12,4 @@ To get started with `rtc.js` the first thing you should do is get a copy of the 
   bower install rtc
   ```
 
-__NOTE:__ I would strongly recommend using NPM for your managing your application dependencies.
+__NOTE:__ I would strongly recommend using npm for your managing your application dependencies, and considering combining that with [browserify](https://browserify.org).
