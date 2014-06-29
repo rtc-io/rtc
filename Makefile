@@ -15,3 +15,4 @@ dist/rtc.js: dist
 dist/rtc.min.js: dist/rtc.js
 	@echo "building rtc.min.js"
 	@$(BIN)/uglifyjs < dist/rtc.js > dist/rtc.min.js
+	@echo "build complete minified version = `wc -c dist/rtc.min.js` bytes"
