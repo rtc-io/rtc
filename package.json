@@ -23,11 +23,10 @@
   "homepage": "https://github.com/rtc-io/rtc",
   "dependencies": {
     "cog": "^0.5.3",
-    "collections": "^1.1.0",
     "crel": "^1.1.2",
     "rtc-captureconfig": "^1.0.0",
     "rtc-media": "^1.6.6",
-    "rtc-quickconnect": "^1.0.5"
+    "rtc-quickconnect": "rtc-io/rtc-quickconnect"
   },
   "devDependencies": {
     "browserify": "^4.2.0",
