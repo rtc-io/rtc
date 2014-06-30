@@ -1,6 +1,6 @@
 {
   "name": "rtc",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Build WebRTC conferencing applications with easy using rtc.io. This package provides a super-friendly entry point for working with WebRTC, dive into underling rtc.io modules for more configuration and customization opportunities",
   "main": "index.js",
   "scripts": {
