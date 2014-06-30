@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "gendocs": "gendocs > README.md"
+    "gendocs": "gendocs > README.md",
+    "prepublish": "make && git status -unormal | grep \"nothing to commit\""
   },
   "repository": {
     "type": "git",
