@@ -53,7 +53,7 @@ module.exports = function(opts) {
     });
 
     // emit a ready event for the rtc
-    rtc.emit('ready');
+    rtc.emit('ready', signaller);
   }
 
   function gotLocalStream(stream) {
