@@ -5,6 +5,9 @@ WebRTC applications.  It aggregates together a variety of packages (primarily
 from the [rtc.io](https://github.com/rtc-io) suite) to deliver a single
 package for building a WebRTC application.
 
+
+[![NPM](https://nodei.co/npm/rtc.png)](https://nodei.co/npm/rtc/)
+
 [![experimental](https://img.shields.io/badge/stability-experimental-red.svg)](https://github.com/dominictarr/stability#experimental) 
 
 ## Getting Started
