@@ -24,6 +24,7 @@
   "dependencies": {
     "cog": "^1.0.0",
     "crel": "^1.1.2",
+    "eventemitter3": "^0.1.2",
     "rtc-captureconfig": "^1.0.0",
     "rtc-media": "^1.6.6",
     "rtc-quickconnect": "^2.0.0"

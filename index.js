@@ -1,4 +1,4 @@
-var EventEmitter = require('events').EventEmitter;
+var EventEmitter = require('eventemitter3');
 var crel = require('crel');
 var defaults = require('cog/defaults');
 var extend = require('cog/extend');
