@@ -10,7 +10,7 @@ dist:
 
 dist/rtc.js: dist
 	@echo "building rtc.js"
-	@$(BIN)/browserify -d index.js > dist/rtc.js
+	@$(BIN)/browserify -d -s RTC index.js > dist/rtc.js
 
 dist/rtc.min.js: dist/rtc.js
 	@echo "building rtc.min.js"
