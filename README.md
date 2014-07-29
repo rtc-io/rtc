@@ -33,8 +33,15 @@ We use [browserify](https://browserify.org) to bundle our CommonJS modules for u
 
 ## Example Usage
 
+Establish a connection and render local and remote video feeds.
+
 ```html
+
+<div id="r-video"></div>
+<div id="l-video"></div>
+
 <script src="/path/to/rtc.js"></script>
+
 ```
 
 ```js
@@ -55,10 +62,57 @@ var remoteVideo = document.getElementById('r-video');
 // Display local and remote video streams
 localVideo.appendChild(rtc.local);
 remoteVideo.appendChild(rtc.remote);
+```
 
-function init(session) {
-  // Start working with the established session
+Use a data channel to share text messages
+
+```html
+<div id="messages" contenteditable></div>
+<div id="r-video"></div>
+<div id="l-video"></div>
+
+<script src="/path/to/rtc.js"></script>
+
+```
+
+```js
+// Set RTC options.
+var rtcOpts = {
+    room: 'bla',
+    signaller: '//switchboard.rtc.io'
+  };
+// call RTC module
+var rtc = RTC(rtcOpts);
+// A contenteditable element to show our messages
+var messageWindow = document.getElementById('messages');
+// A div element to show our local video stream
+var localVideo = document.getElementById('l-video');
+// A div element to show our remote video streams
+var remoteVideo = document.getElementById('r-video');
+
+// Bind to events happening on the data channel
+function bindDataChannelEvents(id, channel, attributes, connection) {
+
+  // Receive message
+  channel.onmessage = function (evt) {
+    messageWindow.innerHTML = evt.data;
+  };
+
+  // Send message
+  messageWindow.onkeyup = function () {
+    channel.send(this.innerHTML);
+  };
 }
+
+// Start working with the established session
+function init(session) {
+  session.createDataChannel('blabla');
+  session.on('channel:opened:blabla', bindDataChannelEvents);
+}
+
+// Display local and remote video streams
+localVideo.appendChild(rtc.local);
+remoteVideo.appendChild(rtc.remote);
 
 // Detect when RTC has established a session
 rtc.on('ready', init);
