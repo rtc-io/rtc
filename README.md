@@ -14,7 +14,7 @@ package for building a WebRTC application.
 
 Grab the latest distribution build of rtc at:
 
-https://cdn.rawgit.com/rtc-io/rtc/6c8c6a9d11298d4c4ef608d6b614792f1ae70091/dist/rtc.js
+https://cdn.rawgit.com/rtc-io/rtc/3973cd643cf59b89d17792a49b4821cf7c9ba2ed/dist/rtc.min.js
 
 Also available via bower:
 
