@@ -31,7 +31,7 @@ Or if you prefer to work directly with the CommonJS module you can install it vi
 We use [browserify](https://browserify.org) to bundle our CommonJS modules for use in the browser.
 
 
-## Example Usage
+## Basic Usage
 
 Establish a connection and render local and remote video feeds.
 
@@ -63,6 +63,7 @@ var remoteVideo = document.getElementById('r-video');
 localVideo.appendChild(rtc.local);
 remoteVideo.appendChild(rtc.remote);
 ```
+## Sharing Video, Audio and Data Streams
 
 Use a data channel to share text messages
 
