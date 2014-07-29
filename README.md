@@ -65,7 +65,7 @@ remoteVideo.appendChild(rtc.remote);
 ```
 ## Sharing Video, Audio and Data Streams
 
-Use a data channel to share text messages
+Add a data channel to share text messages
 
 ```html
 <div id="messages" contenteditable></div>
@@ -79,7 +79,7 @@ Use a data channel to share text messages
 ```js
 // Set RTC options.
 var rtcOpts = {
-    room: 'bla',
+    room: 'test-room-2',
     signaller: '//switchboard.rtc.io'
   };
 // call RTC module
@@ -107,8 +107,8 @@ function bindDataChannelEvents(id, channel, attributes, connection) {
 
 // Start working with the established session
 function init(session) {
-  session.createDataChannel('blabla');
-  session.on('channel:opened:blabla', bindDataChannelEvents);
+  session.createDataChannel('chat');
+  session.on('channel:opened:chat', bindDataChannelEvents);
 }
 
 // Display local and remote video streams
