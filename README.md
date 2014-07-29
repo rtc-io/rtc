@@ -8,46 +8,58 @@ package for building a WebRTC application.
 
 [![NPM](https://nodei.co/npm/rtc.png)](https://nodei.co/npm/rtc/)
 
-[![experimental](https://img.shields.io/badge/stability-experimental-red.svg)](https://github.com/dominictarr/stability#experimental) 
+[![experimental](https://img.shields.io/badge/stability-experimental-red.svg)](https://github.com/dominictarr/stability#experimental)
 
 ## Getting Started
 
-To get started with `rtc.js` the first thing you should do is get a copy of the library.  This can be done in any of the following ways:
+Grab the latest distribution build of rtc at [https://cdn.rawgit.com/rtc-io/rtc/6c8c6a9d11298d4c4ef608d6b614792f1ae70091/dist/rtc.js]
 
-- By installing it from npm:
-
-  ```
-  npm install rtc --save
-  ```
-
-- By installing it with bower:
+rtc is also available via bower:
 
   ```
   bower install rtc
   ```
 
-__NOTE:__ I would strongly recommend using npm for your managing your application dependencies, and considering combining that with [browserify](https://browserify.org).
+Or if you prefer to work directly with the CommonJS module you can install it via npm:
+
+  ```
+  npm install rtc --save
+  ```
+
+We use [browserify](https://browserify.org) to bundle our CommonJS modules for use in the browser.
 
 
 ## Example Usage
 
-Displayed below is a very simple example of using the `rtc` module to build a simple video conferencing app:
-
-```js
-var rtc = require('rtc');
-
-// prime a session
-var session = rtc({ room: 'test-room' });
-
-// add a div (class="rtc-media rtc-localvideo") to the DOM
-document.body.appendChild(session.local);
-
-// add a div (class="rtc-media rtc-remotevideo") to the DOM
-document.body.appendChild(session.remote);
-
+```html
+  <script src="/path/to/rtc.js"></script>
 ```
 
+```js
+      var rtcOpts = {
+          room: 'test-room',
+          signaller: '//switchboard.rtc.io'
+        };
+      // call RTC module
+      var rtc = RTC(rtcOpts);
+      // A div element to show our local video stream
+      var localVideo = document.getElementById('l-video');
+      // A div element to show our remote video streams
+      var remoteVideo = document.getElementById('r-video');
 
+      // Start working with the established session
+      function init(session) {
+        session.createDataChannel('blabla');
+        session.on('channel:opened:blabla', bindDataChannelEvents);
+      }
+
+      // Display local and remote video streams
+      localVideo.appendChild(rtc.local);
+      remoteVideo.appendChild(rtc.remote);
+
+      // Detect when RTC has established a session
+      rtc.on('ready', init);
+```
 
 ## License(s)
 
