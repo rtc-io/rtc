@@ -111,5 +111,10 @@ module.exports = function(opts) {
     class: 'rtc-media rtc-remotevideo'
   });
 
+  // if we have 0 capture targets announce
+  if (captureTargets.length === 0) {
+    setTimeout(announce, 0);
+  }
+
   return rtc;
 }
