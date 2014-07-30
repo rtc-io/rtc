@@ -27,7 +27,8 @@ var DEFAULT_CONSTRAINTS = { video: true, audio: true };
 
 module.exports = function(opts) {
   var rtc = new EventEmitter();
-  var constraints = [].concat((opts || {}).capture || [ DEFAULT_CONSTRAINTS ]);
+  var capture = (opts || {}).capture;
+  var constraints = typeof capture == 'undefined' ? [ DEFAULT_CONSTRAINTS ] : (capture || []);
   var plugins = (opts || {}).plugins || [];
   var signalhost = (opts || {}).signaller || '//switchboard.rtc.io';
   var localStreams = [];
