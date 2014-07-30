@@ -27,7 +27,8 @@ var DEFAULT_CONSTRAINTS = { video: true, audio: true };
 
 module.exports = function(opts) {
   var rtc = new EventEmitter();
-  var constraints = [].concat((opts || {}).capture || [ DEFAULT_CONSTRAINTS ]);
+  var capture = (opts || {}).capture;
+  var constraints = typeof capture == 'undefined' ? [ DEFAULT_CONSTRAINTS ] : (capture || []);
   var plugins = (opts || {}).plugins || [];
   var signalhost = (opts || {}).signaller || '//switchboard.rtc.io';
   var localStreams = [];
@@ -110,6 +111,11 @@ module.exports = function(opts) {
   remoteVideo = rtc.remote = crel('div', {
     class: 'rtc-media rtc-remotevideo'
   });
+
+  // if we have 0 capture targets announce
+  if (captureTargets.length === 0) {
+    setTimeout(announce, 0);
+  }
 
   return rtc;
 }
