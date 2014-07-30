@@ -15,14 +15,6 @@ var DEFAULT_CONSTRAINTS = { video: true, audio: true };
   from the [rtc.io](https://github.com/rtc-io) suite) to deliver a single
   package for building a WebRTC application.
 
-  ## Getting Started
-
-  <<< docs/getting-started.md
-
-  ## Example Usage
-
-  <<< docs/examples.md
-
 **/
 
 module.exports = function(opts) {
