@@ -83,5 +83,6 @@ function removeRemoteVideos(id) {
 
 function reportError(qc, config) {
   return function(err) {
+    console.error(err);
   };
 }
