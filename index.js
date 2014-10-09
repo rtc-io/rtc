@@ -1,113 +1,87 @@
-var EventEmitter = require('eventemitter3');
-var crel = require('crel');
 var defaults = require('cog/defaults');
 var extend = require('cog/extend');
+var attach = require('rtc-attach');
+var capture = require('rtc-capture');
 var quickconnect = require('rtc-quickconnect');
-var captureconfig = require('rtc-captureconfig');
-var media = require('rtc-media');
-var DEFAULT_CONSTRAINTS = { video: true, audio: true };
+var chain = require('whisk/chain');
+var append = require('fdom/append');
+var tweak = require('fdom/classtweak');
+var qsa = require('fdom/qsa');
+var kgo = require('kgo');
 
-/**
-  # rtc
+module.exports = function(config) {
+  var conference;
 
-  This is a package that will provide you a "one-stop shop" for building
-  WebRTC applications.  It aggregates together a variety of packages (primarily
-  from the [rtc.io](https://github.com/rtc-io) suite) to deliver a single
-  package for building a WebRTC application.
+  // extend our configuration with the defaults
+  config = defaults({}, config, require('./defaultconfig.js'));
 
-**/
+  // create our conference instance
+  conference = quickconnect(
+    config.signaller,
+    extend({ expectedLocalStreams: 1 }, config.opts, {
+      room: config.room
+    })
+  );
 
-module.exports = function(opts) {
-  var rtc = new EventEmitter();
-  var capture = (opts || {}).capture;
-  var constraints = typeof capture == 'undefined' ? [ DEFAULT_CONSTRAINTS ] : (capture || []);
-  var plugins = (opts || {}).plugins || [];
-  var signalhost = (opts || {}).signaller || '//switchboard.rtc.io';
-  var localStreams = [];
-  var localVideo;
-  var remoteVideo;
+  conference
+  .on('call:ended', removeRemoteVideos)
+  .on('stream:added', remoteVideo(conference, config));
 
-  // capture media
-  var captureTargets = constraints.map(parseConstraints).map(function(constraints) {
-    return media({ constraints: constraints, plugins: plugins });
+  Object.keys(config.channels || {}).forEach(function(name) {
+    var channelConfig = config.channels[name];
+
+    conference.createDataChannel(name, channelConfig === true ? null : channelConfig);
   });
 
-  function announce() {
-    // create the signaller
-    var signaller = rtc.signaller = quickconnect(signalhost, opts);
-
-    signaller
-      .on('call:started', handleCallStart)
-      .on('call:ended', handleCallEnd);
-
-    // add the local streams
-    localStreams.forEach(function(stream) {
-      signaller.addStream(stream);
-    });
-
-    // emit a ready event for the rtc
-    rtc.emit('ready', signaller);
+  // if we have constraints, then capture video
+  if (config.constraints) {
+    localVideo(conference, config);
   }
 
-  function gotLocalStream(stream) {
-    media({ stream: stream, plugins: plugins, muted: true }).render(localVideo);
+  return conference;
+}
 
-    localStreams.push(stream);
-    if (localStreams.length >= captureTargets.length) {
-      announce();
-    }
-  }
+function flagOwnership(peerId) {
+  return function(el) {
+    el.dataset.peer = peerId;
+  };
+};
 
-  function handleCallStart(id, pc, data) {
-    // create the container for this peers streams
-    var container = crel('div', {
-      class: 'rtc-peer',
-      'data-peerid': id
-    });
+function localVideo(qc, config) {
+  // use kgo to help with flow control
+  kgo(config)
+  ('capture', [ 'constraints', 'options' ], capture)
+  ('attach', [ 'capture', 'options' ], attach.local)
+  ('render-local', [ 'attach' ], chain([
+    tweak('+rtc'),
+    tweak('+localvideo'),
+    append.to((config || {}).localContainer || '#l-video')
+  ]))
+  ('start-conference', [ 'capture' ], qc.addStream)
+  .on('error', reportError(qc, config));
+}
 
-    console.log('call started with peer: ' + id);
-    pc.getRemoteStreams().forEach(function(stream) {
-      media({ stream: stream, plugins: plugins }).render(container);
-    });
+function remoteVideo(qc, config) {
+  return function(id, stream) {
+    kgo({ stream: stream })
+    ('attach', [ 'stream' ], attach)
+    ('render-remote', [ 'attach' ], chain([
+      tweak('+rtc'),
+      tweak('+remotevideo'),
+      flagOwnership(id),
+      append.to((config || {}).remoteContainer || '#r-video')
+    ]))
+    .on('error', reportError(qc, config));
+  };
+}
 
-    remoteVideo.appendChild(container);
-  }
-
-  function handleCallEnd(id, pc, data) {
-    var el = remoteVideo.querySelector('div[data-peerid="' + id + '"]');
-
-    if (el) {
-      el.parentNode.removeChild(el);
-    }
-  }
-
-  function parseConstraints(input) {
-    if (typeof input == 'string') {
-      return captureconfig(input).toConstraints();
-    }
-
-    return input;
-  }
-
-  // once we've captured all the streams start the call
-  captureTargets.forEach(function(target) {
-    target.once('capture', gotLocalStream);
+function removeRemoteVideos(id) {
+  qsa('[data-peer="' + id + '"]').forEach(function(el) {
+    el.parentNode.removeChild(el);
   });
+}
 
-  // create the local container
-  localVideo = rtc.local = crel('div', {
-    class: 'rtc-media rtc-localvideo'
-  });
-
-  // create the remote container
-  remoteVideo = rtc.remote = crel('div', {
-    class: 'rtc-media rtc-remotevideo'
-  });
-
-  // if we have 0 capture targets announce
-  if (captureTargets.length === 0) {
-    setTimeout(announce, 0);
-  }
-
-  return rtc;
+function reportError(qc, config) {
+  return function(err) {
+  };
 }
