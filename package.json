@@ -4,7 +4,7 @@
   "description": "Build WebRTC conferencing applications with easy using rtc.io. This package provides a super-friendly entry point for working with WebRTC, dive into underling rtc.io modules for more configuration and customization opportunities",
   "main": "index.js",
   "scripts": {
-    "browserify": "mkdir -p dist && browserify index.js -s RTC > dist/rtc.js",
+    "browserify": "mkdir -p dist && browserify index.js -s RTC --debug > dist/rtc.js",
     "uglify": "cat dist/rtc.js | uglifyjs > dist/rtc.min.js",
     "build": "npm run browserify && npm run uglify",
     "prepublish": "npm dedupe && npm run build"
