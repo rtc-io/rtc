@@ -1,0 +1,11 @@
+video {
+    max-width: 100%;
+}
+
+#r-video > * {
+    width: 50%;
+}
+
+#r-video > *:only-child {
+    width: 100%;
+}
