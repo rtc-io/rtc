@@ -4,9 +4,10 @@
   "description": "Build WebRTC conferencing applications with easy using rtc.io. This package provides a super-friendly entry point for working with WebRTC, dive into underling rtc.io modules for more configuration and customization opportunities",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "gendocs": "gendocs > README.md",
-    "prepublish": "make && git status -unormal | grep \"nothing to commit\""
+    "browserify": "mkdir -p dist && browserify index.js -s RTC > dist/rtc.js",
+    "uglify": "cat dist/rtc.js | uglifyjs > dist/rtc.min.js",
+    "build": "npm run browserify && npm run uglify",
+    "prepublish": "npm dedupe && npm run build"
   },
   "repository": {
     "type": "git",
@@ -23,7 +24,17 @@
   },
   "homepage": "https://github.com/rtc-io/rtc",
   "dependencies": {
+    "cog": "^1.0.0",
+    "fdom": "^1.0.0",
+    "kgo": "^1.2.0",
+    "rtc-attach": "^1.1.0",
+    "rtc-capture": "^1.0.1",
+    "rtc-captureconfig": "^2.1.0",
+    "rtc-quickconnect": "^3.0.0",
+    "whisk": "^1.0.0"
   },
   "devDependencies": {
+    "browserify": "^6.0.3",
+    "uglify-js": "^2.4.15"
   }
 }
