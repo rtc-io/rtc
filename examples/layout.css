@@ -1,5 +1,21 @@
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+}
+
 video {
+    background: black;
+    object-fit: cover;
+}
+
+#l-video > * {
     max-width: 100%;
+}
+
+#r-video {
+    overflow: hidden;
 }
 
 #r-video > * {
@@ -8,4 +24,5 @@ video {
 
 #r-video > *:only-child {
     width: 100%;
+    height: 100%;
 }
