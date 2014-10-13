@@ -101,11 +101,11 @@ If there is a specific application that you are looking to build with [rtc.io](h
 
 - I feel comfortable using browserify, and find it a great way of building apps.
 
-  _Configure your application using npm, and start by including the rtc package (`npm install --save rtc`).  If you need more flexibility than what is offered through this package, take something like [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) for a spin.
+  _Configure your application using npm, and start by including the rtc package (`npm install --save rtc`).  If you need more flexibility than what is offered through this package, take something like [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) for a spin._
 
 - I am building something that isn't really media related, and just want to play with data channels.
 
-  _You are going to want to use [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) and we'd strongly recommend getting comfortable with browserify if you aren't already as it's going to make your life a lot easier.
+  _You are going to want to use [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) and we'd strongly recommend getting comfortable with browserify if you aren't already as it's going to make your life a lot easier._
 
 ## License(s)
 
