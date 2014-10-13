@@ -1,13 +1,9 @@
 # rtc
 
-This is a package that will provide you a "one-stop shop" for building
-WebRTC applications.  It aggregates together a variety of packages (primarily
-from the [rtc.io](https://github.com/rtc-io) suite) to deliver a single
-package for building a WebRTC application.
+This is a package that will provide you a "one-stop shop" for building WebRTC applications.  It aggregates together a variety of packages (primarily from the [rtc.io](https://github.com/rtc-io) suite) to deliver a single package for building a WebRTC application.
 
 
 [![NPM](https://nodei.co/npm/rtc.png)](https://nodei.co/npm/rtc/)
-
 [![experimental](https://img.shields.io/badge/stability-experimental-red.svg)](https://github.com/dominictarr/stability#experimental)
 
 ## Getting Started
@@ -30,94 +26,86 @@ Or if you prefer to work directly with the CommonJS module you can install it vi
 
 We use [browserify](https://browserify.org) to bundle our CommonJS modules for use in the browser.
 
-
 ## Basic Usage
 
 Establish a connection and render local and remote video feeds.
 
 ```html
-
-<div id="r-video"></div>
-<div id="l-video"></div>
-
-<script src="/path/to/rtc.js"></script>
-
+<html>
+<head>
+<title>rtc.io simple conferencing</title>
+<link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.5.0/pure-min.css">
+<link rel="stylesheet" href="layout.css">
+</head>
+<body onload="RTC()" class="pure-g">
+    <div class="pure-u-1-5">
+        <div class="rtc chatbox"></div>
+        <div id="l-video"></div>
+    </div>
+    <div class="pure-u-4-5" id="r-video"></div>
+<script src="rtc.min.js"></script>
+</body>
+</html>
 ```
+
+In this example, the [default configuration options](defaultconfig.js) are used for configuration, which are displayed below for informational purposes:
 
 ```js
-// rtc needs a named room and a signalling server location to create a session.
-// switchboard.rtc.io may be used for testing, or you can host your own signaller
-// with rtc-switchboard module.
-var rtcOpts = {
-      room: 'test-room',
-      signaller: '//switchboard.rtc.io'
-    };
-// call RTC module
-var rtc = RTC(rtcOpts);
-// A div element to show our local video stream
-var localVideo = document.getElementById('l-video');
-// A div element to show our remote video streams
-var remoteVideo = document.getElementById('r-video');
+// a default configuration that is used by the rtc package
+module.exports = {
+  // simple constraints for defaults
+  constraints: {
+    video: true,
+    audio: true
+  },
 
-// Display local and remote video streams
-localVideo.appendChild(rtc.local);
-remoteVideo.appendChild(rtc.remote);
+  // use the public switchboard for signalling
+  signaller: '//switchboard.rtc.io',
+
+  // no room is defined by default
+  // rtc-quickconnect will autogenerate using a location.hash
+  room: undefined,
+
+  // specify ice servers or a generator function to create ice servers
+  ice: [],
+
+  // any data channels that we want to create for the conference
+  // by default a chat channel is created, but other channels can be added also
+  // additionally options can be supplied to customize the data channel config
+  // see: <http://w3c.github.io/webrtc-pc/#idl-def-RTCDataChannelInit>
+  channels: {
+    chat: true
+  },
+
+  // the selector that will be used to identify the localvideo container
+  localContainer: '#l-video',
+
+  // the selector that will be used to identify the remotevideo container
+  remoteContainer: '#r-video',
+
+  // should we atempt to load any plugins?
+  plugins: [],
+
+  // common options overrides that are used across rtc.io packages
+  options: {}
+};
 ```
-## Sharing Video, Audio and Data Streams
 
-Add a data channel to share text messages
+## Diving Deeper
 
-```html
-<div id="messages" contenteditable></div>
-<div id="r-video"></div>
-<div id="l-video"></div>
+If there is a specific application that you are looking to build with [rtc.io](http://rtc.io/) feel free to [open an issue](https://github.com/rtc-io/rtc/issues/new) and outline a few of your requirements (video, audio, data, etc) and we can give you some advice.  In most cases, the following is a good rule of thumb for working our where you should jump in with rtc.io packages.
 
-<script src="/path/to/rtc.js"></script>
+- Video and/or audio is crucial to my application and I haven't done a lot of work with [browserify](http://browserify.org)
 
-```
+  _Use the `rtc` distribution files from the CDN, and build your app_
 
-```js
-// Set RTC options.
-var rtcOpts = {
-    room: 'test-room-2',
-    signaller: '//switchboard.rtc.io'
-  };
-// call RTC module
-var rtc = RTC(rtcOpts);
-// A contenteditable element to show our messages
-var messageWindow = document.getElementById('messages');
-// A div element to show our local video stream
-var localVideo = document.getElementById('l-video');
-// A div element to show our remote video streams
-var remoteVideo = document.getElementById('r-video');
+- I feel comfortable using browserify, and find it a great way of building apps.
 
-// Bind to events happening on the data channel
-function bindDataChannelEvents(id, channel, attributes, connection) {
+  _Configure your application using npm, and start by including the rtc package (`npm install --save rtc`).  If you need more flexibility than what is offered through this package, take something like [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) for a spin.
 
-  // Receive message
-  channel.onmessage = function (evt) {
-    messageWindow.innerHTML = evt.data;
-  };
+- I am building something that isn't really media related, and just want to play with data channels.
 
-  // Send message
-  messageWindow.onkeyup = function () {
-    channel.send(this.innerHTML);
-  };
-}
-
-// Start working with the established session
-function init(session) {
-  session.createDataChannel('chat');
-  session.on('channel:opened:chat', bindDataChannelEvents);
-}
-
-// Display local and remote video streams
-localVideo.appendChild(rtc.local);
-remoteVideo.appendChild(rtc.remote);
-
-// Detect when RTC has established a session
-rtc.on('ready', init);
-```
+  _You are going to want to use [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) and we'd strongly recommend getting comfortable with browserify if you aren't already as it's going to make your life a lot easier.
 
 ## License(s)
 
