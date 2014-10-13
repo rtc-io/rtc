@@ -14,6 +14,9 @@ module.exports = {
   // rtc-quickconnect will autogenerate using a location.hash
   room: undefined,
 
+  // specify ice servers or a generator function to create ice servers
+  ice: [],
+
   // any data channels that we want to create for the conference
   // by default a chat channel is created, but other channels can be added also
   // additionally options can be supplied to customize the data channel config
@@ -28,11 +31,11 @@ module.exports = {
   // the selector that will be used to identify the remotevideo container
   remoteContainer: '#r-video',
 
-  // common options that are used across rtc.io packages
-  options: {
-    // should we atempt to load any plugins?
-    plugins: []
-  }
+  // should we atempt to load any plugins?
+  plugins: [],
+
+  // common options overrides that are used across rtc.io packages
+  options: {}
 };
 
 },{}],2:[function(require,module,exports){
@@ -56,9 +59,12 @@ module.exports = function(config) {
   // create our conference instance
   conference = quickconnect(
     config.signaller,
-    extend({ expectedLocalStreams: 1 }, config.opts, {
-      room: config.room
-    })
+    extend({
+      room: config.room,
+      ice: config.ice,
+      plugins: config.plugins,
+      expectedLocalStreams: 1
+    }, config.options)
   );
 
   conference
@@ -125,7 +131,7 @@ function reportError(qc, config) {
   };
 }
 
-},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":21,"whisk/chain":47}],3:[function(require,module,exports){
+},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":21,"whisk/chain":46}],3:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -3964,6 +3970,7 @@ var cleanup = require('./cleanup');
 var monitor = require('./monitor');
 var detect = require('./detect');
 var findPlugin = require('rtc-core/plugin');
+var throttle = require('cog/throttle');
 var CLOSED_STATES = [ 'closed', 'failed' ];
 
 /**
@@ -4028,19 +4035,15 @@ function couple(pc, targetId, signaller, opts) {
   // initialise the processing queue (one at a time please)
   var q = queue(pc, opts);
 
-  function createOrRequestOffer() {
+  var createOrRequestOffer = throttle(function() {
     if (! isMaster) {
       return signaller.to(targetId).send('/negotiate');
     }
 
     q.createOffer();
-  }
+  }, 100, { leading: false });
 
-  function debounceOffer() {
-    debug('debouncing offer');
-    clearTimeout(offerTimeout);
-    offerTimeout = setTimeout(q.createOffer, 50);
-  }
+  var debounceOffer = throttle(q.createOffer, 100, { leading: false });
 
   function decouple() {
     debug('decoupling ' + signaller.id + ' from ' + targetId);
@@ -4168,7 +4171,7 @@ function couple(pc, targetId, signaller, opts) {
 
 module.exports = couple;
 
-},{"./cleanup":36,"./detect":38,"./monitor":41,"cog/logger":9,"mbus":22,"rtc-core/plugin":20,"rtc-taskqueue":42}],38:[function(require,module,exports){
+},{"./cleanup":36,"./detect":38,"./monitor":41,"cog/logger":9,"cog/throttle":10,"mbus":22,"rtc-core/plugin":20,"rtc-taskqueue":42}],38:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4479,7 +4482,6 @@ function getMappedState(state) {
 
 },{"mbus":22}],42:[function(require,module,exports){
 var detect = require('rtc-core/detect');
-var zip = require('whisk/zip');
 var findPlugin = require('rtc-core/plugin');
 var PriorityQueue = require('priorityqueuejs');
 
@@ -4575,11 +4577,12 @@ module.exports = function(pc, opts) {
     var ready = next && testReady(next);
     var retry = (! queue.isEmpty()) && isNotClosed(pc);
 
-//     debug('checking queue: ', currentTask, next && next.name, ready);
+    // reset the queue timer
+    checkQueueTimer = 0;
 
     // if we don't have a task ready, then abort
     if (! ready) {
-      return retry && triggerQueueCheck(100);
+      return retry && triggerQueueCheck();
     }
 
     // update the current task (dequeue)
@@ -4735,7 +4738,7 @@ module.exports = function(pc, opts) {
   }
 
   function hasLocalOrRemoteDesc(pc, task) {
-    return pc.localDescription !== null || pc.remoteDescription !== null;
+    return pc.__hasDesc || (pc.__hasDesc = !!pc.remoteDescription);
   }
 
   function isNotNegotiating(pc) {
@@ -4751,17 +4754,19 @@ module.exports = function(pc, opts) {
   }
 
   function isValidCandidate(pc, data) {
-    return checkCandidate(data.args[0]).length === 0;
+    return data.__valid ||
+      (data.__valid = checkCandidate(data.args[0]).length === 0);
   }
 
   function orderTasks(a, b) {
     // apply each of the checks for each task
     var tasks = [a,b];
     var readiness = tasks.map(testReady);
-    var taskPriorities = tasks.map(zip(readiness)).map(function(args) {
-      var priority = priorities.indexOf(args[0].name);
+    var taskPriorities = tasks.map(function(task, idx) {
+      var ready = readiness[idx];
+      var priority = ready && priorities.indexOf(task.name);
 
-      return args[1] ? (priority >= 0 ? priority : PRIORITY_LOW) : PRIORITY_WAIT;
+      return ready ? (priority >= 0 ? priority : PRIORITY_LOW) : PRIORITY_WAIT;
     });
 
     return taskPriorities[1] - taskPriorities[0];
@@ -4774,9 +4779,9 @@ module.exports = function(pc, opts) {
     }, true);
   }
 
-  function triggerQueueCheck(wait) {
-    clearTimeout(checkQueueTimer);
-    checkQueueTimer = setTimeout(checkQueue, wait || 5);
+  function triggerQueueCheck() {
+    if (checkQueueTimer) return;
+    checkQueueTimer = setTimeout(checkQueue, 50);
   }
 
   // patch in the queue helper methods
@@ -4807,7 +4812,7 @@ module.exports = function(pc, opts) {
   return tq;
 };
 
-},{"mbus":22,"priorityqueuejs":43,"rtc-core/detect":18,"rtc-core/plugin":20,"rtc-sdpclean":44,"rtc-validator/candidate":45,"whisk/zip":46}],43:[function(require,module,exports){
+},{"mbus":22,"priorityqueuejs":43,"rtc-core/detect":18,"rtc-core/plugin":20,"rtc-sdpclean":44,"rtc-validator/candidate":45}],43:[function(require,module,exports){
 /**
  * Expose `PriorityQueue`.
  */
@@ -5126,28 +5131,6 @@ function validateParts(part, idx) {
 }
 
 },{"cog/logger":9}],46:[function(require,module,exports){
-/**
-  ## zip
-
-  zip one array with other arrays
-
-  <<< examples/zip.js
-
-  ### zip todo
-
-  - tests
-
-**/
-module.exports = function() {
-  var targets = [].slice.call(arguments);
-
-  return function(item, index) {
-    return [item].concat(targets.map(function(val) {
-      return val[index];
-    }));
-  };
-};
-},{}],47:[function(require,module,exports){
 /**
   ## chain
 
