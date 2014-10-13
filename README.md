@@ -39,7 +39,6 @@ Establish a connection and render local and remote video feeds.
 </head>
 <body onload="RTC()" class="pure-g">
     <div class="pure-u-1-5">
-        <div class="rtc chatbox"></div>
         <div id="l-video"></div>
     </div>
     <div class="pure-u-4-5" id="r-video"></div>
