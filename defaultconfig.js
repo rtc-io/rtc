@@ -13,6 +13,9 @@ module.exports = {
   // rtc-quickconnect will autogenerate using a location.hash
   room: undefined,
 
+  // specify ice servers or a generator function to create ice servers
+  ice: [],
+
   // any data channels that we want to create for the conference
   // by default a chat channel is created, but other channels can be added also
   // additionally options can be supplied to customize the data channel config
@@ -27,9 +30,9 @@ module.exports = {
   // the selector that will be used to identify the remotevideo container
   remoteContainer: '#r-video',
 
-  // common options that are used across rtc.io packages
-  options: {
-    // should we atempt to load any plugins?
-    plugins: []
-  }
+  // should we atempt to load any plugins?
+  plugins: [],
+
+  // common options overrides that are used across rtc.io packages
+  options: {}
 };

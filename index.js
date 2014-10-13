@@ -18,9 +18,12 @@ module.exports = function(config) {
   // create our conference instance
   conference = quickconnect(
     config.signaller,
-    extend({ expectedLocalStreams: 1 }, config.opts, {
-      room: config.room
-    })
+    extend({
+      room: config.room,
+      ice: config.ice,
+      plugins: config.plugins,
+      expectedLocalStreams: 1
+    }, config.options)
   );
 
   conference
