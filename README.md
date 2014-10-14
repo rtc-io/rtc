@@ -10,11 +10,11 @@ This is a package that will provide you a "one-stop shop" for building WebRTC ap
 
 Probably the easiest way to get started with `RTC` is to take it for a testdrive using jsbin:
 
-<http://jsbin.com/dahipoboceya/3/>
+<http://jsbin.com/dahipoboceya/>
 
 This demo uses the minified JS file (and associated sourcemaps for debugging) from:
 
-<https://cdn.rawgit.com/rtc-io/rtc/v3.0.0/dist/rtc.min.js>
+<https://cdn.rawgit.com/rtc-io/rtc/v3.0.1/dist/rtc.min.js>
 
 ### Package Managers FTW!
 
