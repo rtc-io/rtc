@@ -8,23 +8,20 @@ This is a package that will provide you a "one-stop shop" for building WebRTC ap
 
 ## Getting Started
 
-Grab the latest distribution build of rtc at:
+Probably the easiest way to get started with `RTC` is to take it for a testdrive using jsbin:
 
-  <https://cdn.rawgit.com/rtc-io/rtc/v3.0.0/dist/rtc.min.js>
+<http://jsbin.com/dahipoboceya/3/>
 
-Also available via bower:
+This demo uses the minified JS file (and associated sourcemaps for debugging) from:
 
-  ```
-  bower install rtc
-  ```
+<https://cdn.rawgit.com/rtc-io/rtc/v3.0.0/dist/rtc.min.js>
 
-Or if you prefer to work directly with the CommonJS module you can install it via npm:
+### Package Managers FTW!
 
-  ```
-  npm install rtc --save
-  ```
+I'd recommend using a package manager if you aren't already and here are the relevant instructions for installing `RTC` from a number of popular options:
 
-We use [browserify](https://browserify.org) to bundle our CommonJS modules for use in the browser.
+- __npm__: `npm install rtc --save`
+- __bowser__: `bowser install rtc-io/rtc`
 
 ## Basic Usage
 
@@ -42,7 +39,7 @@ Establish a connection and render local and remote video feeds.
         <div id="l-video"></div>
     </div>
     <div class="pure-u-4-5" id="r-video"></div>
-<script src="rtc.min.js"></script>
+<script src="https://cdn.rawgit.com/rtc-io/rtc/v3.0.0/dist/rtc.min.js"></script>
 </body>
 </html>
 ```
