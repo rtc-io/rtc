@@ -1,0 +1,13 @@
+<html>
+<head>
+<title>rtc.io simple chat</title>
+</head>
+<body>
+<script src="../dist/rtc.min.js"></script>
+<script>
+RTC({ constraints: null }).on('channel:opened:chat', function(id, dc) {
+    console.log('chat channel opened with peer: ' + id, dc);
+});
+</script>
+</body>
+</html>
