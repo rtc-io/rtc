@@ -10,7 +10,7 @@ This is a package that will provide you a "one-stop shop" for building WebRTC ap
 
 Grab the latest distribution build of rtc at:
 
-https://cdn.rawgit.com/rtc-io/rtc/5559c185db3793fbc6209a59c12cfec49c9e83b2/dist/rtc.min.js
+  <https://cdn.rawgit.com/rtc-io/rtc/v3.0.0/dist/rtc.min.js>
 
 Also available via bower:
 
