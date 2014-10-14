@@ -63,7 +63,7 @@ module.exports = function(config) {
       room: config.room,
       ice: config.ice,
       plugins: config.plugins,
-      expectedLocalStreams: 1
+      expectedLocalStreams: config.constraints ? 1 : 0
     }, config.options)
   );
 
