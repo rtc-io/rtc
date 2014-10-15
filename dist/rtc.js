@@ -56,16 +56,16 @@ module.exports = function(config) {
   // extend our configuration with the defaults
   config = defaults({}, config, require('./defaultconfig.js'));
 
+  // remap our options based on top level settings
+  config.options = extend({
+    room: config.room,
+    ice: config.ice,
+    plugins: config.plugins,
+    expectedLocalStreams: config.constraints ? 1 : 0
+  }, config.options);
+
   // create our conference instance
-  conference = quickconnect(
-    config.signaller,
-    extend({
-      room: config.room,
-      ice: config.ice,
-      plugins: config.plugins,
-      expectedLocalStreams: config.constraints ? 1 : 0
-    }, config.options)
-  );
+  conference = quickconnect(config.signaller, config.options);
 
   conference
   .on('call:ended', removeRemoteVideos)
@@ -107,8 +107,8 @@ function localVideo(qc, config) {
 
 function remoteVideo(qc, config) {
   return function(id, stream) {
-    kgo({ stream: stream })
-    ('attach', [ 'stream' ], attach)
+    kgo(extend({ stream: stream }, config))
+    ('attach', [ 'stream', 'options' ], attach)
     ('render-remote', [ 'attach' ], chain([
       tweak('+rtc'),
       tweak('+remotevideo'),
@@ -1269,7 +1269,6 @@ var extend = require('cog/extend');
 **/
 var attach = module.exports = function(stream, opts, callback) {
   var URL = typeof window != 'undefined' && window.URL;
-  var el;
   var pinst;
 
   if (typeof opts == 'function') {
@@ -3968,8 +3967,6 @@ var mbus = require('mbus');
 var queue = require('rtc-taskqueue');
 var cleanup = require('./cleanup');
 var monitor = require('./monitor');
-var detect = require('./detect');
-var findPlugin = require('rtc-core/plugin');
 var throttle = require('cog/throttle');
 var CLOSED_STATES = [ 'closed', 'failed' ];
 
@@ -4017,12 +4014,8 @@ function couple(pc, targetId, signaller, opts) {
   // create a monitor for the connection
   var mon = monitor(pc, targetId, signaller, (opts || {}).logger);
   var emit = mbus('', mon);
-  var queuedCandidates = [];
-  var sdpFilter = (opts || {}).sdpfilter;
   var reactive = (opts || {}).reactive;
-  var offerTimeout;
   var endOfCandidates = true;
-  var plugin = findPlugin((opts || {}).plugins);
 
   // configure the time to wait between receiving a 'disconnect'
   // iceConnectionState and determining that we are closed
@@ -4103,7 +4096,7 @@ function couple(pc, targetId, signaller, opts) {
     }
 
     mon.once('disconnect', handleDisconnect);
-  };
+  }
 
   function handleLocalCandidate(evt) {
     if (evt.candidate) {
@@ -4171,7 +4164,7 @@ function couple(pc, targetId, signaller, opts) {
 
 module.exports = couple;
 
-},{"./cleanup":36,"./detect":38,"./monitor":41,"cog/logger":9,"cog/throttle":10,"mbus":22,"rtc-core/plugin":20,"rtc-taskqueue":42}],38:[function(require,module,exports){
+},{"./cleanup":36,"./monitor":41,"cog/logger":9,"cog/throttle":10,"mbus":22,"rtc-taskqueue":42}],38:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4227,10 +4220,6 @@ var mappings = {
   If you pass in both a generator and iceServers, the iceServers _will be
   ignored and the generator used instead.
 **/
-
-var iceServerGenerator = function () {
-  return [];
-}
 
 exports.config = function(config) {
   var iceServerGenerator = (config || {}).iceServerGenerator;
@@ -4352,21 +4341,19 @@ exports.couple = require('./couple');
 **/
 exports.createConnection = function(opts, constraints) {
   var plugin = findPlugin((opts || {}).plugins);
+  var PeerConnection = (opts || {}).RTCPeerConnection || RTCPeerConnection;
 
   // generate the config based on options provided
   var config = gen.config(opts);
 
   // generate appropriate connection constraints
-  var constraints = gen.connectionConstraints(opts, constraints);
+  constraints = gen.connectionConstraints(opts, constraints);
 
   if (plugin && typeof plugin.createConnection == 'function') {
     return plugin.createConnection(config, constraints);
   }
-  else {
-    return new ((opts || {}).RTCPeerConnection || RTCPeerConnection)(
-      config, constraints
-    );
-  }
+
+  return new PeerConnection(config, constraints);
 };
 
 },{"./couple":37,"./detect":38,"./generators":39,"cog/logger":9,"rtc-core/plugin":20}],41:[function(require,module,exports){
@@ -4538,6 +4525,9 @@ module.exports = function(pc, opts) {
   var currentTask;
   var defaultFail = tq.bind(tq, 'fail');
 
+  // look for an sdpfilter function (allow slight mis-spellings)
+  var sdpFilter = (opts || {}).sdpfilter || (opts || {}).sdpFilter;
+
   // initialise session description and icecandidate objects
   var RTCSessionDescription = (opts || {}).RTCSessionDescription ||
     detect('RTCSessionDescription');
@@ -4620,6 +4610,11 @@ module.exports = function(pc, opts) {
     if (desc && sdp !== desc.sdp) {
       console.info('invalid lines removed from sdp: ', sdpErrors);
       desc.sdp = sdp;
+    }
+
+    // if a filter has been specified, then apply the filter
+    if (typeof sdpFilter == 'function') {
+      desc.sdp = sdpFilter(desc.sdp, pc, methodName);
     }
 
     return desc;
