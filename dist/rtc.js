@@ -131,7 +131,7 @@ function reportError(qc, config) {
   };
 }
 
-},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":21,"whisk/chain":46}],3:[function(require,module,exports){
+},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":22,"whisk/chain":47}],3:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -1351,7 +1351,7 @@ attach.local = function(stream, opts, callback) {
   attach(stream, extend({ muted: true }, opts), callback);
 };
 
-},{"cog/extend":6,"rtc-core/plugin":20}],17:[function(require,module,exports){
+},{"cog/extend":6,"rtc-core/plugin":21}],17:[function(require,module,exports){
 var plugin = require('rtc-core/plugin');
 var detect = require('rtc-core/detect');
 
@@ -1418,7 +1418,7 @@ module.exports = function(constraints, opts, callback) {
   navigator.getUserMedia(constraints, handleCapture, callback);
 };
 
-},{"rtc-core/detect":18,"rtc-core/plugin":20}],18:[function(require,module,exports){
+},{"rtc-core/detect":18,"rtc-core/plugin":21}],18:[function(require,module,exports){
 /* jshint node: true */
 /* global window: false */
 /* global navigator: false */
@@ -1491,7 +1491,39 @@ detect.moz = typeof navigator != 'undefined' && !!navigator.mozGetUserMedia;
 detect.browser = browser.name;
 detect.browserVersion = detect.version = browser.version;
 
-},{"detect-browser":19}],19:[function(require,module,exports){
+},{"detect-browser":20}],19:[function(require,module,exports){
+/**
+  ### `rtc-core/genice`
+
+  Respond appropriately to options that are passed to packages like
+  `rtc-quickconnect` and trigger a `callback` (error first) with iceServer
+  values.
+
+  The function looks for either of the following keys in the options, in
+  the following order or precedence:
+
+  1. `ice` - this can either be an array of ice server values or a generator
+     function (in the same format as this function).  If this key contains a
+     value then any servers specified in the `iceServers` key (2) will be
+     ignored.
+
+  2. `iceServers` - an array of ice server values.
+**/
+module.exports = function(opts, callback) {
+  var ice = (opts || {}).ice;
+  var iceServers = (opts || {}).iceServers;
+
+  if (typeof ice == 'function') {
+    return ice(opts, callback);
+  }
+  else if (Array.isArray(ice)) {
+    return callback(null, [].concat(ice));
+  }
+
+  callback(null, [].concat(iceServers || []));
+};
+
+},{}],20:[function(require,module,exports){
 var browsers = [
   [ 'chrome', /Chrom(?:e|ium)\/([0-9\.]+)(:?\s|$)/ ],
   [ 'firefox', /Firefox\/([0-9\.]+)(?:\s|$)/ ],
@@ -1525,7 +1557,7 @@ function isMatch(pair) {
   return !!pair[2];
 }
 
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 var detect = require('./detect');
 var requiredFunctions = [
   'init'
@@ -1547,7 +1579,7 @@ module.exports = function(plugins) {
   return [].concat(plugins || []).filter(isSupported).filter(isValid)[0];
 }
 
-},{"./detect":18}],21:[function(require,module,exports){
+},{"./detect":18}],22:[function(require,module,exports){
 (function (process){
 /* jshint node: true */
 'use strict';
@@ -1667,6 +1699,10 @@ module.exports = function(signalhost, opts) {
   var profile = {};
   var announced = false;
 
+  // initialise iceServers to undefined
+  // we will not announce until these have been properly initialised
+  var iceServers;
+
   // collect the local streams
   var localStreams = [];
 
@@ -1757,6 +1793,11 @@ module.exports = function(signalhost, opts) {
   function checkReadyToAnnounce() {
     clearTimeout(announceTimer);
     if (! allowJoin) {
+      return;
+    }
+
+    // if we have no iceServers we aren't ready
+    if (! iceServers) {
       return;
     }
 
@@ -1866,7 +1907,12 @@ module.exports = function(signalhost, opts) {
     }
 
     // create a peer connection
-    pc = rtc.createConnection(opts, (opts || {}).constraints);
+    // iceServers that have been created using genice taking precendence
+    pc = rtc.createConnection(
+      extend({}, opts, { iceServers: iceServers }),
+      (opts || {}).constraints
+    );
+
     signaller('peer:connect', data.id, pc, data);
 
     // add this connection to the calls list
@@ -2260,15 +2306,22 @@ module.exports = function(signalhost, opts) {
   // respond to local announce messages
   signaller.on('local:announce', handleLocalAnnounce);
 
-  // check to see if we are ready to announce
-  checkReadyToAnnounce();
+  // use genice to find our iceServers
+  require('rtc-core/genice')(opts, function(err, servers) {
+    if (err) {
+      return console.error('could not find iceServers: ', err);
+    }
+
+    iceServers = servers;
+    checkReadyToAnnounce();
+  });
 
   // pass the signaller on
   return signaller;
 };
 
 }).call(this,require('_process'))
-},{"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":22,"rtc-signaller":25,"rtc-tools":40,"rtc-tools/cleanup":36}],22:[function(require,module,exports){
+},{"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":23,"rtc-core/genice":19,"rtc-signaller":26,"rtc-tools":41,"rtc-tools/cleanup":37}],23:[function(require,module,exports){
 var createTrie = require('array-trie');
 var reDelim = /[\.\:]/;
 
@@ -2437,7 +2490,7 @@ var createBus = module.exports = function(namespace, parent, scope) {
   return bus;
 };
 
-},{"array-trie":24}],23:[function(require,module,exports){
+},{"array-trie":25}],24:[function(require,module,exports){
 "use strict"
 
 function compileSearch(funcName, predicate, reversed, extraArgs, useNdarray, earlyOut) {
@@ -2499,7 +2552,7 @@ module.exports = {
   eq: compileBoundsSearch("-", true, "EQ", true)
 }
 
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 "use strict"
 
 var bounds = require("binary-search-bounds")
@@ -2587,7 +2640,7 @@ proto.get = function(s) {
 function createTrie() {
   return new Trie([],[])
 }
-},{"binary-search-bounds":23}],25:[function(require,module,exports){
+},{"binary-search-bounds":24}],26:[function(require,module,exports){
 var extend = require('cog/extend');
 
 module.exports = function(messenger, opts) {
@@ -2596,7 +2649,7 @@ module.exports = function(messenger, opts) {
   }, opts));
 };
 
-},{"./primus-loader":33,"./signaller.js":35,"cog/extend":6}],26:[function(require,module,exports){
+},{"./primus-loader":34,"./signaller.js":36,"cog/extend":6}],27:[function(require,module,exports){
 module.exports = {
   // messenger events
   dataEvent: 'data',
@@ -2612,7 +2665,7 @@ module.exports = {
   leaveTimeout: 3000
 };
 
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -2719,7 +2772,7 @@ module.exports = function(signaller) {
   };
 };
 
-},{"cog/extend":6,"cog/logger":9}],28:[function(require,module,exports){
+},{"cog/extend":6,"cog/logger":9}],29:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -2734,7 +2787,7 @@ module.exports = function(signaller, opts) {
     leave: require('./leave')(signaller, opts)
   };
 };
-},{"./announce":27,"./leave":29}],29:[function(require,module,exports){
+},{"./announce":28,"./leave":30}],30:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -2768,7 +2821,7 @@ module.exports = function(signaller, opts) {
   };
 };
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 /**
  * cuid.js
  * Collision-resistant UID generator for browsers and node.
@@ -2880,7 +2933,7 @@ module.exports = function(signaller, opts) {
 
 }(this.applitude || this));
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3126,7 +3179,7 @@ function createModifiers(modifierStrings) {
   return modifiers;
 }
 
-},{"./mods":32}],32:[function(require,module,exports){
+},{"./mods":33}],33:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3169,7 +3222,7 @@ exports.len = function(length, padder) {
     return output;
   };
 };
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 /* jshint node: true */
 /* global document, location, Primus: false */
 'use strict';
@@ -3255,7 +3308,7 @@ module.exports = function(signalhost, opts, callback) {
   document.body.appendChild(script);
 };
 
-},{"formatter":31}],34:[function(require,module,exports){
+},{"formatter":32}],35:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3383,7 +3436,7 @@ module.exports = function(signaller, opts) {
   };
 };
 
-},{"./handlers":28,"cog/jsonparse":8,"cog/logger":9}],35:[function(require,module,exports){
+},{"./handlers":29,"cog/jsonparse":8,"cog/logger":9}],36:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3896,7 +3949,7 @@ module.exports = function(messenger, opts) {
   return signaller;
 };
 
-},{"./defaults":26,"./processor":34,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cog/logger":9,"cog/throttle":10,"cuid":30,"mbus":22,"rtc-core/detect":18}],36:[function(require,module,exports){
+},{"./defaults":27,"./processor":35,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cog/logger":9,"cog/throttle":10,"cuid":31,"mbus":23,"rtc-core/detect":18}],37:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3959,7 +4012,7 @@ module.exports = function(pc) {
   }, 100);
 };
 
-},{"cog/logger":9}],37:[function(require,module,exports){
+},{"cog/logger":9}],38:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4164,7 +4217,7 @@ function couple(pc, targetId, signaller, opts) {
 
 module.exports = couple;
 
-},{"./cleanup":36,"./monitor":41,"cog/logger":9,"cog/throttle":10,"mbus":22,"rtc-taskqueue":42}],38:[function(require,module,exports){
+},{"./cleanup":37,"./monitor":42,"cog/logger":9,"cog/throttle":10,"mbus":23,"rtc-taskqueue":43}],39:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4176,7 +4229,7 @@ module.exports = couple;
 **/
 module.exports = require('rtc-core/detect');
 
-},{"rtc-core/detect":18}],39:[function(require,module,exports){
+},{"rtc-core/detect":18}],40:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4265,7 +4318,7 @@ exports.connectionConstraints = function(flags, constraints) {
   return out;
 };
 
-},{"./detect":38,"cog/defaults":5,"cog/logger":9}],40:[function(require,module,exports){
+},{"./detect":39,"cog/defaults":5,"cog/logger":9}],41:[function(require,module,exports){
 /* jshint node: true */
 
 'use strict';
@@ -4356,7 +4409,7 @@ exports.createConnection = function(opts, constraints) {
   return new PeerConnection(config, constraints);
 };
 
-},{"./couple":37,"./detect":38,"./generators":39,"cog/logger":9,"rtc-core/plugin":20}],41:[function(require,module,exports){
+},{"./couple":38,"./detect":39,"./generators":40,"cog/logger":9,"rtc-core/plugin":21}],42:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4467,7 +4520,7 @@ function getMappedState(state) {
   return stateMappings[state] || state;
 }
 
-},{"mbus":22}],42:[function(require,module,exports){
+},{"mbus":23}],43:[function(require,module,exports){
 var detect = require('rtc-core/detect');
 var findPlugin = require('rtc-core/plugin');
 var PriorityQueue = require('priorityqueuejs');
@@ -4807,7 +4860,7 @@ module.exports = function(pc, opts) {
   return tq;
 };
 
-},{"mbus":22,"priorityqueuejs":43,"rtc-core/detect":18,"rtc-core/plugin":20,"rtc-sdpclean":44,"rtc-validator/candidate":45}],43:[function(require,module,exports){
+},{"mbus":23,"priorityqueuejs":44,"rtc-core/detect":18,"rtc-core/plugin":21,"rtc-sdpclean":45,"rtc-validator/candidate":46}],44:[function(require,module,exports){
 /**
  * Expose `PriorityQueue`.
  */
@@ -4981,7 +5034,7 @@ PriorityQueue.prototype._swap = function(a, b) {
   this._elements[b] = aux;
 };
 
-},{}],44:[function(require,module,exports){
+},{}],45:[function(require,module,exports){
 var validators = [
   [ /^(a\=candidate.*)$/, require('rtc-validator/candidate') ]
 ];
@@ -5038,7 +5091,7 @@ function detectLineBreak(input) {
   return match && match[0];
 }
 
-},{"rtc-validator/candidate":45}],45:[function(require,module,exports){
+},{"rtc-validator/candidate":46}],46:[function(require,module,exports){
 var debug = require('cog/logger')('rtc-validator');
 var rePrefix = /^(?:a=)?candidate:/;
 var reIP = /^(\d+\.){3}\d+$/;
@@ -5125,7 +5178,7 @@ function validateParts(part, idx) {
   }
 }
 
-},{"cog/logger":9}],46:[function(require,module,exports){
+},{"cog/logger":9}],47:[function(require,module,exports){
 /**
   ## chain
 
