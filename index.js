@@ -15,16 +15,16 @@ module.exports = function(config) {
   // extend our configuration with the defaults
   config = defaults({}, config, require('./defaultconfig.js'));
 
+  // remap our options based on top level settings
+  config.options = extend({
+    room: config.room,
+    ice: config.ice,
+    plugins: config.plugins,
+    expectedLocalStreams: config.constraints ? 1 : 0
+  }, config.options);
+
   // create our conference instance
-  conference = quickconnect(
-    config.signaller,
-    extend({
-      room: config.room,
-      ice: config.ice,
-      plugins: config.plugins,
-      expectedLocalStreams: config.constraints ? 1 : 0
-    }, config.options)
-  );
+  conference = quickconnect(config.signaller, config.options);
 
   conference
   .on('call:ended', removeRemoteVideos)
@@ -66,8 +66,8 @@ function localVideo(qc, config) {
 
 function remoteVideo(qc, config) {
   return function(id, stream) {
-    kgo({ stream: stream })
-    ('attach', [ 'stream' ], attach)
+    kgo(extend({ stream: stream }, config))
+    ('attach', [ 'stream', 'options' ], attach)
     ('render-remote', [ 'attach' ], chain([
       tweak('+rtc'),
       tweak('+remotevideo'),
