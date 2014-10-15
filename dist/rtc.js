@@ -21,9 +21,7 @@ module.exports = {
   // by default a chat channel is created, but other channels can be added also
   // additionally options can be supplied to customize the data channel config
   // see: <http://w3c.github.io/webrtc-pc/#idl-def-RTCDataChannelInit>
-  channels: {
-    chat: true
-  },
+  channels: {},
 
   // the selector that will be used to identify the localvideo container
   localContainer: '#l-video',
