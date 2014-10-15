@@ -8,15 +8,11 @@ This is a package that will provide you a "one-stop shop" for building WebRTC ap
 
 ## Getting Started
 
-Probably the easiest way to get started with `RTC` is to take it for a testdrive using jsbin:
-
-<http://jsbin.com/dahipoboceya/>
-
-This demo uses the minified JS file (and associated sourcemaps for debugging) from:
+Probably the easiest way to get started with `RTC` is to take it for a testdrive using [jsbin](http://jsbin.com/dahipoboceya/). This demo uses the minified JS file (and associated sourcemaps for debugging) from:
 
 `//cdn.jsdelivr.net/rtc/latest/rtc.min.js`
 
-OR, to use a specific version number (from `3.0.1` onwards):
+If you wish to use a specific version, then you can replace `latest` with the version number (from `3.0.1` onwards):
 
 `//cdn.jsdelivr.net/rtc/3.0.1/rtc.min.js`
 
