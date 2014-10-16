@@ -4174,11 +4174,21 @@ function couple(pc, targetId, signaller, opts) {
   }
 
   function handleLocalCandidate(evt) {
+    var data;
+
     if (evt.candidate) {
       resetDisconnectTimer();
 
-      emit('ice.local', evt.candidate);
-      signaller.to(targetId).send('/candidate', evt.candidate);
+      // formulate into a specific data object so we won't be upset by plugin
+      // specific implementations of the candidate data format (i.e. extra fields)
+      data = {
+        candidate: evt.candidate.candidate,
+        sdpMid: evt.candidate.sdpMid,
+        sdpMLineIndex: evt.candidate.sdpMLineIndex
+      };
+
+      emit('ice.local', data);
+      signaller.to(targetId).send('/candidate', data);
       endOfCandidates = false;
     }
     else if (! endOfCandidates) {
