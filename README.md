@@ -8,7 +8,7 @@ This is a package that will provide you a "one-stop shop" for building WebRTC ap
 
 ## Getting Started
 
-Probably the easiest way to get started with `RTC` is to take it for a testdrive using [jsbin](http://jsbin.com/dahipoboceya/edit?html,css,js,output). This demo uses the minified JS file (and associated sourcemaps for debugging) from:
+Probably the easiest way to get started with `RTC` is to take it for a testdrive using [jsbin](http://jsbin.com/dahuka/edit?html,css,js,output). This demo uses the minified JS file (and associated sourcemaps for debugging) from:
 
 `//cdn.jsdelivr.net/rtc/latest/rtc.min.js`
 
@@ -106,7 +106,7 @@ If there is a specific application that you are looking to build with [rtc.io](h
 
 ## Other Simple Demos / Tutorials
 
-- [Data Channels Only Demo](http://jsbin.com/cipul/edit?html,js,console) - if you really don't want to go down the [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) and browserify road.
+- [Data Channels Only Demo](http://jsbin.com/rimexe/edit?html,js,output) - if you really don't want to go down the [`rtc-quickconnect`](https://github.com/rtc-io/rtc-quickconnect) and browserify road.
 
 
 ## License(s)
