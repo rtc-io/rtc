@@ -1306,6 +1306,10 @@ var attach = module.exports = function(stream, opts, callback) {
       el.setAttribute('muted', '');
     }
 
+    if ((o || {}).mirror) {
+      el.style.transform = 'scale(-1, 1)';
+    }
+
     if (autoplay === undefined || autoplay) {
       el.play();
     }
@@ -1346,7 +1350,7 @@ attach.local = function(stream, opts, callback) {
     opts = {};
   }
 
-  attach(stream, extend({ muted: true }, opts), callback);
+  attach(stream, extend({ muted: true, mirror: true }, opts), callback);
 };
 
 },{"cog/extend":6,"rtc-core/plugin":21}],17:[function(require,module,exports){
@@ -1793,6 +1797,11 @@ module.exports = function(signalhost, opts) {
 
   function checkReadyToAnnounce() {
     clearTimeout(announceTimer);
+    // if we have already announced do nothing!
+    if (announced) {
+      return;
+    }
+
     if (! allowJoin) {
       return;
     }
@@ -2035,7 +2044,6 @@ module.exports = function(signalhost, opts) {
 
   signaller.on('peer:announce', handlePeerAnnounce);
   signaller.on('peer:update', handlePeerUpdate);
-  signaller.on('peer:leave', callEnd);
 
   /**
     ### Quickconnect Broadcast and Data Channel Helper Functions
