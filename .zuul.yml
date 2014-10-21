@@ -1,0 +1,9 @@
+ui: mocha-qunit
+browsers:
+  - name: chrome
+    version: 32..latest
+
+  - name: firefox
+    version: 27..latest
+
+# server: ./test/server.js
