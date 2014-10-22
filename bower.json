@@ -1,7 +1,7 @@
 {
   "name": "rtc",
   "main": "dist/rtc.min.js",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "authors": [
     "Damon Oehlman <damon.oehlman@nicta.com.au>"
   ],
