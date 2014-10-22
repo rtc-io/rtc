@@ -4,7 +4,9 @@ This is a package that will provide you a "one-stop shop" for building WebRTC ap
 
 [![NPM](https://nodei.co/npm/rtc.png)](https://nodei.co/npm/rtc/)
 
+[![Build Status](https://img.shields.io/travis/rtc-io/rtc.svg?branch=master)](https://travis-ci.org/rtc-io/rtc)
 [![experimental](https://img.shields.io/badge/stability-experimental-red.svg)](https://github.com/dominictarr/stability#experimental)
+[![Gitter chat](https://badges.gitter.im/rtc-io/discuss.png)](https://gitter.im/rtc-io/discuss)
 
 ## Getting Started
 
