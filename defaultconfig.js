@@ -6,7 +6,7 @@ module.exports = {
     audio: true
   },
 
-  // use the public switchboard for signalling
+  // use the public development switchboard for signalling
   signaller: 'https://switchboard.rtc.io/',
 
   // no room is defined by default
