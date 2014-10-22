@@ -7,7 +7,7 @@ module.exports = {
   },
 
   // use the public switchboard for signalling
-  signaller: '//switchboard.rtc.io',
+  signaller: 'https://switchboard.rtc.io/',
 
   // no room is defined by default
   // rtc-quickconnect will autogenerate using a location.hash
