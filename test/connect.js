@@ -32,6 +32,8 @@ test('receive call:started events for both connections', function(done) {
     }
   }
 
+  this.timeout(5000);
+
   connections[0].once('call:started', function(id) {
     assert.equal(id, connections[1].id);
     checkExpected();
