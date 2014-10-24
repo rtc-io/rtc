@@ -23,7 +23,7 @@ If you wish to use a specific version, then you can replace `latest` with the ve
 I'd recommend using a package manager if you aren't already and here are the relevant instructions for installing `RTC` from a number of popular options:
 
 - __npm__: `npm install rtc --save`
-- __bowser__: `bowser install rtc-io/rtc`
+- __bower__: `bower install rtc-io/rtc`
 
 ## Basic Usage
 
