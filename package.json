@@ -34,7 +34,7 @@
     "whisk": "^1.0.0"
   },
   "devDependencies": {
-    "browserify": "^6.0.3",
+    "browserify": "^7.0.2",
     "exorcist": "^0.1.6",
     "mocha": "^1.21.5",
     "uglify-js": "^2.4.15",
