@@ -129,7 +129,7 @@ function reportError(qc, config) {
   };
 }
 
-},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":22,"whisk/chain":65}],3:[function(require,module,exports){
+},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":22,"whisk/chain":63}],3:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2486,7 +2486,7 @@ module.exports = function(signalhost, opts) {
 };
 
 }).call(this,require('_process'))
-},{"./messenger":23,"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":24,"rtc-core/genice":19,"rtc-core/plugin":21,"rtc-signaller":30,"rtc-tools":59,"rtc-tools/cleanup":55}],23:[function(require,module,exports){
+},{"./messenger":23,"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":24,"rtc-core/genice":19,"rtc-core/plugin":21,"rtc-signaller":31,"rtc-tools":57,"rtc-tools/cleanup":53}],23:[function(require,module,exports){
 module.exports = function(messenger) {
   if (typeof messenger == 'function') {
     return messenger;
@@ -2495,7 +2495,7 @@ module.exports = function(messenger) {
   return require('rtc-switchboard-messenger')(messenger);
 };
 
-},{"rtc-switchboard-messenger":46}],24:[function(require,module,exports){
+},{"rtc-switchboard-messenger":45}],24:[function(require,module,exports){
 var createTrie = require('array-trie');
 var reDelim = /[\.\:]/;
 
@@ -2815,6 +2815,123 @@ function createTrie() {
   return new Trie([],[])
 }
 },{"binary-search-bounds":25}],27:[function(require,module,exports){
+exports.id = 
+function (item) {
+  return item
+}
+
+exports.prop = 
+function (map) {  
+  if('string' == typeof map) {
+    var key = map
+    return function (data) { return data[key] }
+  }
+  return map
+}
+
+exports.tester = function (test) {
+  if(!test) return exports.id
+  if('object' === typeof test
+    && 'function' === typeof test.test)
+      return test.test.bind(test)
+  return exports.prop(test) || exports.id
+}
+
+exports.addPipe = addPipe
+
+function addPipe(read) {
+  if('function' !== typeof read)
+    return read
+
+  read.pipe = read.pipe || function (reader) {
+    if('function' != typeof reader)
+      throw new Error('must pipe to reader')
+    return addPipe(reader(read))
+  }
+  read.type = 'Source'
+  return read
+}
+
+var Source =
+exports.Source =
+function Source (createRead) {
+  function s() {
+    var args = [].slice.call(arguments)
+    return addPipe(createRead.apply(null, args))
+  }
+  s.type = 'Source'
+  return s
+}
+
+
+var Through =
+exports.Through = 
+function (createRead) {
+  return function () {
+    var args = [].slice.call(arguments)
+    var piped = []
+    function reader (read) {
+      args.unshift(read)
+      read = createRead.apply(null, args)
+      while(piped.length)
+        read = piped.shift()(read)
+      return read
+      //pipeing to from this reader should compose...
+    }
+    reader.pipe = function (read) {
+      piped.push(read) 
+      if(read.type === 'Source')
+        throw new Error('cannot pipe ' + reader.type + ' to Source')
+      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
+      return reader
+    }
+    reader.type = 'Through'
+    return reader
+  }
+}
+
+var Sink =
+exports.Sink = 
+function Sink(createReader) {
+  return function () {
+    var args = [].slice.call(arguments)
+    if(!createReader)
+      throw new Error('must be createReader function')
+    function s (read) {
+      args.unshift(read)
+      return createReader.apply(null, args)
+    }
+    s.type = 'Sink'
+    return s
+  }
+}
+
+
+exports.maybeSink = 
+exports.maybeDrain = 
+function (createSink, cb) {
+  if(!cb)
+    return Through(function (read) {
+      var ended
+      return function (close, cb) {
+        if(close) return read(close, cb)
+        if(ended) return cb(ended)
+
+        createSink(function (err, data) {
+          ended = err || true
+          if(!err) cb(null, data)
+          else     cb(ended)
+        }) (read)
+      }
+    })()
+
+  return Sink(function (read) {
+    return createSink(cb) (read)
+  })()
+}
+
+
+},{}],28:[function(require,module,exports){
 module.exports = {
   // messenger events
   dataEvent: 'data',
@@ -2830,7 +2947,7 @@ module.exports = {
   leaveTimeout: 3000
 };
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -2917,7 +3034,7 @@ module.exports = function(signaller) {
   };
 };
 
-},{"cog/extend":6}],29:[function(require,module,exports){
+},{"cog/extend":6}],30:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -2932,7 +3049,7 @@ module.exports = function(signaller, opts) {
   };
 };
 
-},{"./announce":28}],30:[function(require,module,exports){
+},{"./announce":29}],31:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3369,7 +3486,7 @@ module.exports = function(messenger, opts) {
   return signaller;
 };
 
-},{"./defaults":27,"./processor":45,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cuid":31,"mbus":24,"pull-pushable":32,"pull-stream":39,"rtc-core/detect":18}],31:[function(require,module,exports){
+},{"./defaults":28,"./processor":44,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cuid":32,"mbus":24,"pull-pushable":33,"pull-stream":39,"rtc-core/detect":18}],32:[function(require,module,exports){
 /**
  * cuid.js
  * Collision-resistant UID generator for browsers and node.
@@ -3481,7 +3598,7 @@ module.exports = function(messenger, opts) {
 
 }(this.applitude || this));
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 var pull = require('pull-stream')
 
 module.exports = pull.Source(function (onClose) {
@@ -3526,7 +3643,7 @@ module.exports = pull.Source(function (onClose) {
 })
 
 
-},{"pull-stream":33}],33:[function(require,module,exports){
+},{"pull-stream":34}],34:[function(require,module,exports){
 
 var sources  = require('./sources')
 var sinks    = require('./sinks')
@@ -3554,7 +3671,7 @@ exports.Sink    = exports.pipeableSink   = u.Sink
 
 
 
-},{"./maybe":34,"./sinks":36,"./sources":37,"./throughs":38,"pull-core":35}],34:[function(require,module,exports){
+},{"./maybe":35,"./sinks":36,"./sources":37,"./throughs":38,"pull-core":27}],35:[function(require,module,exports){
 var u = require('pull-core')
 var prop = u.prop
 var id   = u.id
@@ -3612,124 +3729,7 @@ module.exports = function (pull) {
   return exports
 }
 
-},{"pull-core":35}],35:[function(require,module,exports){
-exports.id = 
-function (item) {
-  return item
-}
-
-exports.prop = 
-function (map) {  
-  if('string' == typeof map) {
-    var key = map
-    return function (data) { return data[key] }
-  }
-  return map
-}
-
-exports.tester = function (test) {
-  if(!test) return exports.id
-  if('object' === typeof test
-    && 'function' === typeof test.test)
-      return test.test.bind(test)
-  return exports.prop(test) || exports.id
-}
-
-exports.addPipe = addPipe
-
-function addPipe(read) {
-  if('function' !== typeof read)
-    return read
-
-  read.pipe = read.pipe || function (reader) {
-    if('function' != typeof reader)
-      throw new Error('must pipe to reader')
-    return addPipe(reader(read))
-  }
-  read.type = 'Source'
-  return read
-}
-
-var Source =
-exports.Source =
-function Source (createRead) {
-  function s() {
-    var args = [].slice.call(arguments)
-    return addPipe(createRead.apply(null, args))
-  }
-  s.type = 'Source'
-  return s
-}
-
-
-var Through =
-exports.Through = 
-function (createRead) {
-  return function () {
-    var args = [].slice.call(arguments)
-    var piped = []
-    function reader (read) {
-      args.unshift(read)
-      read = createRead.apply(null, args)
-      while(piped.length)
-        read = piped.shift()(read)
-      return read
-      //pipeing to from this reader should compose...
-    }
-    reader.pipe = function (read) {
-      piped.push(read) 
-      if(read.type === 'Source')
-        throw new Error('cannot pipe ' + reader.type + ' to Source')
-      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
-      return reader
-    }
-    reader.type = 'Through'
-    return reader
-  }
-}
-
-var Sink =
-exports.Sink = 
-function Sink(createReader) {
-  return function () {
-    var args = [].slice.call(arguments)
-    if(!createReader)
-      throw new Error('must be createReader function')
-    function s (read) {
-      args.unshift(read)
-      return createReader.apply(null, args)
-    }
-    s.type = 'Sink'
-    return s
-  }
-}
-
-
-exports.maybeSink = 
-exports.maybeDrain = 
-function (createSink, cb) {
-  if(!cb)
-    return Through(function (read) {
-      var ended
-      return function (close, cb) {
-        if(close) return read(close, cb)
-        if(ended) return cb(ended)
-
-        createSink(function (err, data) {
-          ended = err || true
-          if(!err) cb(null, data)
-          else     cb(ended)
-        }) (read)
-      }
-    })()
-
-  return Sink(function (read) {
-    return createSink(cb) (read)
-  })()
-}
-
-
-},{}],36:[function(require,module,exports){
+},{"pull-core":27}],36:[function(require,module,exports){
 var drain = exports.drain = function (read, op, done) {
 
   ;(function next() {
@@ -4217,7 +4217,7 @@ function (read, highWaterMark) {
 
 
 }).call(this,require('_process'))
-},{"./sinks":36,"./sources":37,"_process":4,"pull-core":35}],39:[function(require,module,exports){
+},{"./sinks":36,"./sources":37,"_process":4,"pull-core":27}],39:[function(require,module,exports){
 var sources  = require('./sources')
 var sinks    = require('./sinks')
 var throughs = require('./throughs')
@@ -4293,7 +4293,7 @@ exports.Sink    = exports.pipeableSink   = u.Sink
 
 
 
-},{"./maybe":40,"./sinks":42,"./sources":43,"./throughs":44,"pull-core":41}],40:[function(require,module,exports){
+},{"./maybe":40,"./sinks":41,"./sources":42,"./throughs":43,"pull-core":27}],40:[function(require,module,exports){
 var u = require('pull-core')
 var prop = u.prop
 var id   = u.id
@@ -4358,9 +4358,7 @@ module.exports = function (pull) {
   return exports
 }
 
-},{"pull-core":41}],41:[function(require,module,exports){
-module.exports=require(35)
-},{"/home/doehlman/code/rtc.io/rtc/node_modules/rtc-quickconnect/node_modules/rtc-signaller/node_modules/pull-pushable/node_modules/pull-stream/node_modules/pull-core/index.js":35}],42:[function(require,module,exports){
+},{"pull-core":27}],41:[function(require,module,exports){
 var drain = exports.drain = function (read, op, done) {
 
   ;(function next() {
@@ -4402,7 +4400,7 @@ var log = exports.log = function (read, done) {
 }
 
 
-},{}],43:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
 
 var keys = exports.keys =
 function (object) {
@@ -4560,7 +4558,7 @@ function (start, createStream) {
 }
 
 
-},{}],44:[function(require,module,exports){
+},{}],43:[function(require,module,exports){
 (function (process){
 var u      = require('pull-core')
 var sources = require('./sources')
@@ -4891,7 +4889,7 @@ function (read, mapper) {
 
 
 }).call(this,require('_process'))
-},{"./sinks":42,"./sources":43,"_process":4,"pull-core":41}],45:[function(require,module,exports){
+},{"./sinks":41,"./sources":42,"_process":4,"pull-core":27}],44:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -5018,7 +5016,7 @@ module.exports = function(signaller, opts) {
   };
 };
 
-},{"./handlers":29,"cog/jsonparse":8}],46:[function(require,module,exports){
+},{"./handlers":30,"cog/jsonparse":8}],45:[function(require,module,exports){
 var extend = require('cog/extend');
 
 /**
@@ -5036,7 +5034,7 @@ module.exports = function(switchboard, opts) {
   }, opts));
 };
 
-},{"cog/extend":6,"messenger-ws":47}],47:[function(require,module,exports){
+},{"cog/extend":6,"messenger-ws":46}],46:[function(require,module,exports){
 var WebSocket = require('ws');
 var wsurl = require('wsurl');
 var ps = require('pull-ws');
@@ -5121,7 +5119,7 @@ module.exports = function(url, opts) {
   return connect;
 };
 
-},{"cog/defaults":5,"pull-ws":48,"ws":53,"wsurl":54}],48:[function(require,module,exports){
+},{"cog/defaults":5,"pull-ws":47,"ws":51,"wsurl":52}],47:[function(require,module,exports){
 exports = module.exports = duplex;
 
 exports.source = require('./source');
@@ -5134,126 +5132,7 @@ function duplex (ws, opts) {
   };
 };
 
-},{"./sink":51,"./source":52}],49:[function(require,module,exports){
-exports.id = 
-function (item) {
-  return item
-}
-
-exports.prop = 
-function (map) {  
-  if('string' == typeof map) {
-    var key = map
-    return function (data) { return data[key] }
-  }
-  return map
-}
-
-exports.tester = function (test) {
-  if(!test) return exports.id
-  if('object' === typeof test
-    && 'function' === typeof test.test)
-      return test.test.bind(test)
-  return exports.prop(test) || exports.id
-}
-
-exports.addPipe = addPipe
-
-function addPipe(read) {
-  if('function' !== typeof read)
-    return read
-
-  read.pipe = read.pipe || function (reader) {
-    if('function' != typeof reader && 'function' != typeof reader.sink)
-      throw new Error('must pipe to reader')
-    var pipe = addPipe(reader.sink ? reader.sink(read) : reader(read))
-    return reader.source || pipe;
-  }
-  
-  read.type = 'Source'
-  return read
-}
-
-var Source =
-exports.Source =
-function Source (createRead) {
-  function s() {
-    var args = [].slice.call(arguments)
-    return addPipe(createRead.apply(null, args))
-  }
-  s.type = 'Source'
-  return s
-}
-
-
-var Through =
-exports.Through = 
-function (createRead) {
-  return function () {
-    var args = [].slice.call(arguments)
-    var piped = []
-    function reader (read) {
-      args.unshift(read)
-      read = createRead.apply(null, args)
-      while(piped.length)
-        read = piped.shift()(read)
-      return read
-      //pipeing to from this reader should compose...
-    }
-    reader.pipe = function (read) {
-      piped.push(read) 
-      if(read.type === 'Source')
-        throw new Error('cannot pipe ' + reader.type + ' to Source')
-      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
-      return reader
-    }
-    reader.type = 'Through'
-    return reader
-  }
-}
-
-var Sink =
-exports.Sink = 
-function Sink(createReader) {
-  return function () {
-    var args = [].slice.call(arguments)
-    if(!createReader)
-      throw new Error('must be createReader function')
-    function s (read) {
-      args.unshift(read)
-      return createReader.apply(null, args)
-    }
-    s.type = 'Sink'
-    return s
-  }
-}
-
-
-exports.maybeSink = 
-exports.maybeDrain = 
-function (createSink, cb) {
-  if(!cb)
-    return Through(function (read) {
-      var ended
-      return function (close, cb) {
-        if(close) return read(close, cb)
-        if(ended) return cb(ended)
-
-        createSink(function (err, data) {
-          ended = err || true
-          if(!err) cb(null, data)
-          else     cb(ended)
-        }) (read)
-      }
-    })()
-
-  return Sink(function (read) {
-    return createSink(cb) (read)
-  })()
-}
-
-
-},{}],50:[function(require,module,exports){
+},{"./sink":49,"./source":50}],48:[function(require,module,exports){
 module.exports = function(socket, callback) {
   var remove = socket && (socket.removeEventListener || socket.removeListener);
 
@@ -5286,7 +5165,7 @@ module.exports = function(socket, callback) {
   socket.addEventListener('error', handleErr);
 };
 
-},{}],51:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 (function (process){
 var pull = require('pull-core');
 var ready = require('./ready');
@@ -5341,7 +5220,7 @@ module.exports = pull.Sink(function(read, socket, opts) {
 });
 
 }).call(this,require('_process'))
-},{"./ready":50,"_process":4,"pull-core":49}],52:[function(require,module,exports){
+},{"./ready":48,"_process":4,"pull-core":27}],50:[function(require,module,exports){
 var pull = require('pull-core');
 var ready = require('./ready');
 
@@ -5418,7 +5297,7 @@ module.exports = pull.Source(function(socket) {
   return read;
 });
 
-},{"./ready":50,"pull-core":49}],53:[function(require,module,exports){
+},{"./ready":48,"pull-core":27}],51:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -5463,7 +5342,7 @@ function ws(uri, protocols, opts) {
 
 if (WebSocket) ws.prototype = WebSocket.prototype;
 
-},{}],54:[function(require,module,exports){
+},{}],52:[function(require,module,exports){
 var reHttpUrl = /^http(.*)$/;
 
 /**
@@ -5494,7 +5373,7 @@ module.exports = function(url, opts) {
   return url.replace(reHttpUrl, 'ws$1');
 };
 
-},{}],55:[function(require,module,exports){
+},{}],53:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -5557,7 +5436,7 @@ module.exports = function(pc) {
   }, 100);
 };
 
-},{"cog/logger":9}],56:[function(require,module,exports){
+},{"cog/logger":9}],54:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -5790,7 +5669,7 @@ function couple(pc, targetId, signaller, opts) {
 
 module.exports = couple;
 
-},{"./cleanup":55,"./monitor":60,"cog/logger":9,"cog/throttle":10,"mbus":24,"rtc-taskqueue":61}],57:[function(require,module,exports){
+},{"./cleanup":53,"./monitor":58,"cog/logger":9,"cog/throttle":10,"mbus":24,"rtc-taskqueue":59}],55:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -5802,7 +5681,7 @@ module.exports = couple;
 **/
 module.exports = require('rtc-core/detect');
 
-},{"rtc-core/detect":18}],58:[function(require,module,exports){
+},{"rtc-core/detect":18}],56:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -5891,7 +5770,7 @@ exports.connectionConstraints = function(flags, constraints) {
   return out;
 };
 
-},{"./detect":57,"cog/defaults":5,"cog/logger":9}],59:[function(require,module,exports){
+},{"./detect":55,"cog/defaults":5,"cog/logger":9}],57:[function(require,module,exports){
 /* jshint node: true */
 
 'use strict';
@@ -5982,7 +5861,7 @@ exports.createConnection = function(opts, constraints) {
   return new PeerConnection(config, constraints);
 };
 
-},{"./couple":56,"./detect":57,"./generators":58,"cog/logger":9,"rtc-core/plugin":21}],60:[function(require,module,exports){
+},{"./couple":54,"./detect":55,"./generators":56,"cog/logger":9,"rtc-core/plugin":21}],58:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -6072,7 +5951,7 @@ function getMappedState(state) {
   return stateMappings[state] || state;
 }
 
-},{"mbus":24}],61:[function(require,module,exports){
+},{"mbus":24}],59:[function(require,module,exports){
 var detect = require('rtc-core/detect');
 var findPlugin = require('rtc-core/plugin');
 var PriorityQueue = require('priorityqueuejs');
@@ -6419,7 +6298,7 @@ module.exports = function(pc, opts) {
   return tq;
 };
 
-},{"mbus":24,"priorityqueuejs":62,"rtc-core/detect":18,"rtc-core/plugin":21,"rtc-sdpclean":63,"rtc-validator/candidate":64}],62:[function(require,module,exports){
+},{"mbus":24,"priorityqueuejs":60,"rtc-core/detect":18,"rtc-core/plugin":21,"rtc-sdpclean":61,"rtc-validator/candidate":62}],60:[function(require,module,exports){
 /**
  * Expose `PriorityQueue`.
  */
@@ -6593,7 +6472,7 @@ PriorityQueue.prototype._swap = function(a, b) {
   this._elements[b] = aux;
 };
 
-},{}],63:[function(require,module,exports){
+},{}],61:[function(require,module,exports){
 var validators = [
   [ /^(a\=candidate.*)$/, require('rtc-validator/candidate') ]
 ];
@@ -6650,7 +6529,7 @@ function detectLineBreak(input) {
   return match && match[0];
 }
 
-},{"rtc-validator/candidate":64}],64:[function(require,module,exports){
+},{"rtc-validator/candidate":62}],62:[function(require,module,exports){
 var debug = require('cog/logger')('rtc-validator');
 var rePrefix = /^(?:a=)?candidate:/;
 var reIP = /^(\d+\.){3}\d+$/;
@@ -6737,7 +6616,7 @@ function validateParts(part, idx) {
   }
 }
 
-},{"cog/logger":9}],65:[function(require,module,exports){
+},{"cog/logger":9}],63:[function(require,module,exports){
 /**
   ## chain
 
