@@ -6,8 +6,8 @@
   "scripts": {
     "browserify": "mkdir -p dist && browserify index.js -s RTC --debug | exorcist dist/rtc.js.map > dist/rtc.js",
     "uglify": "uglifyjs --screw-ie8 --mangle --compress --in-source-map dist/rtc.js.map --source-map-include-sources --source-map dist/rtc.min.js.map --source-map-url rtc.min.js.map --output dist/rtc.min.js dist/rtc.js",
-    "build": "npm run browserify && npm run uglify",
-    "prepublish": "npm dedupe && npm run build",
+    "build": "npm dedupe && npm run browserify && npm run uglify",
+    "prepublish": "npm run build",
     "test": "zuul -- test/all.js"
   },
   "repository": {
