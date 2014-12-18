@@ -30,7 +30,7 @@
     "kgo": "^1.2.0",
     "rtc-attach": "^1.2.0",
     "rtc-capture": "^1.0.1",
-    "rtc-quickconnect": "^3.1.0",
+    "rtc-quickconnect": "^4.1.0",
     "whisk": "^1.0.0"
   },
   "devDependencies": {
