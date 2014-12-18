@@ -7,8 +7,8 @@ module.exports = {
     audio: true
   },
 
-  // use the public switchboard for signalling
-  signaller: '//switchboard.rtc.io',
+  // use the public development switchboard for signalling
+  signaller: 'https://switchboard.rtc.io/',
 
   // no room is defined by default
   // rtc-quickconnect will autogenerate using a location.hash
@@ -129,7 +129,7 @@ function reportError(qc, config) {
   };
 }
 
-},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":22,"whisk/chain":47}],3:[function(require,module,exports){
+},{"./defaultconfig.js":1,"cog/defaults":5,"cog/extend":6,"fdom/append":11,"fdom/classtweak":12,"fdom/qsa":13,"kgo":14,"rtc-attach":16,"rtc-capture":17,"rtc-quickconnect":22,"whisk/chain":65}],3:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -1050,48 +1050,64 @@ function newKgo(){
         inFlight,
         defaultsDefined;
 
-    function kgoFn(name, dependencies, fn){
+    function kgoFn(){
         if(inFlight){
             throw "No tasks or defaults may be set after kgo is in flight";
         }
 
-        if(arguments.length === 1 && name !== null && typeof name === 'object'){
+        var argIndex = 0;
+
+        while(typeof arguments[argIndex] === 'string'){
+            argIndex++;
+        }
+
+        var names = Array.prototype.slice.call(arguments, 0, argIndex),
+            dependencies,
+            fn;
+
+        if(!names.length){
+            names.push((returnlessId++).toString() + '__returnless');
+        }
+            
+        if(typeof arguments[argIndex] === 'object' && !Array.isArray(arguments[argIndex])){
+            var defaults = arguments[argIndex];
+
             if(defaultsDefined){
                 throw "Defaults may be defined only once per kgo";
             }
 
-            for(var key in name){
+            for(var key in defaults){
                 if(key in tasks){
                     throw "A task is already defined for " + key;
                 }
-                results[key] = name[key];
+                results[key] = defaults[key];
             }
             defaultsDefined = true;
             return kgoFn;
         }
 
-        if(typeof name !== 'string'){
-            fn = dependencies;
-            dependencies = name;
-            name = (returnlessId++).toString() + '__returnless';
+        if(Array.isArray(arguments[argIndex])){
+            dependencies = arguments[argIndex];
+            argIndex++;
         }
 
-        if(typeof dependencies === 'function'){
-            fn = dependencies;
-            dependencies = [];
+        if(typeof arguments[argIndex] === 'function'){
+            fn = arguments[argIndex];
         }
 
         if(typeof fn !== 'function'){
-            throw new Error('No function provided for task number ' + Object.keys(tasks).length + ' (' + name + ')');
+            throw new Error('No function provided for task number ' + Object.keys(tasks).length + ' (' + names + ')');
         }
 
-        if(name in results){
-            throw "A default with the same name as this task (" + name + ") has already been set";
+        for(var i = 0; i < names.length; i++){
+            if(names[i] in results){
+                throw "A default with the same name as this task (" + names[i] + ") has already been set";
+            }
         }
 
-        tasks[name] = {
-            name: name,
-            args: dependencies,
+        tasks[names] = {
+            names: names,
+            args: dependencies || [],
             fn: fn
         };
 
@@ -1116,6 +1132,11 @@ module.exports = newKgo;
 },{"./run":15,"events":3}],15:[function(require,module,exports){
 var ignoreDependency = /^\!.+/;
 
+function rotate90(array){
+  // transpose from http://www.codesuck.com/2012/02/transpose-javascript-array-in-one-line.html
+  return Object.keys(array[0]).map(function (c) { return array.map(function (r) { return r[c]; }); });
+}
+
 function Step(task, args, done){
     this._task = task;
     this._args = args;
@@ -1128,8 +1149,9 @@ Step.prototype.run = function(){
         results = [],
         didError;
 
-    this._task.fn.apply(this, this._args.concat([function(error, result){
-        results.push(result);
+    this._task.fn.apply(this, this._args.concat([function(error){
+        var stepResults = Array.prototype.slice.call(arguments, 1);
+        results.push(stepResults);
         step._runs++;
         if(error){
             didError = true;
@@ -1147,11 +1169,11 @@ Step.prototype.done = function(error, results){
     if(error){
         return this._done(error);
     }
-    this._done(null, this._parallel ? results : results[0]);
+    this._done(null, this._parallel ? rotate90(results) : results[0]);
 };
 
 function runTask(task, results, aboutToRun, done){
-    var name = task.name,
+    var names = task.names,
         dependants = task.args,
         taskFunction = task.fn,
         args = [];
@@ -1175,11 +1197,11 @@ function runTask(task, results, aboutToRun, done){
         }
     }
 
-    var step = new Step(task, args, function(error, result){
-        done(name, error, result);
+    var step = new Step(task, args, function(error, results){
+        done(names, error, results);
     });
 
-    aboutToRun(name);
+    aboutToRun(names);
     step.run();
 }
 
@@ -1192,16 +1214,19 @@ function run(tasks, results, emitter){
         runTask(
             currentTask,
             results,
-            function(name){
-                delete tasks[name];
+            function(names){
+                delete tasks[names];
             },
-            function(name, error, result){
+            function(names, error, taskResults){
                 if(error){
-                    emitter.emit('error', error, name);
+                    emitter.emit('error', error, names);
                     return;
                 }
 
-                results[name] = result;
+                for(var i = 0; i < names.length; i++){
+                    results[names[i]] = taskResults[i];
+                }
+
                 run(tasks, results, emitter);
             }
         );
@@ -1274,10 +1299,23 @@ var attach = module.exports = function(stream, opts, callback) {
     opts = {};
   }
 
+  function applyModifications(el, o) {
+    if ((o || {}).muted) {
+      el.muted = true;
+      el.setAttribute('muted', '');
+    }
+
+    if ((o || {}).mirror) {
+      el.setAttribute('data-mirrored', true);
+    }
+
+    return el;
+  }
+
   function attachToElement(s, o) {
     var autoplay = (o || {}).autoplay;
     var elType = 'audio';
-    var el = (o || {}).el;
+    var el = (o || {}).el || (o || {}).target;
 
     // check the stream is valid
     var isValid = s && typeof s.getVideoTracks == 'function';
@@ -1285,6 +1323,11 @@ var attach = module.exports = function(stream, opts, callback) {
     // determine the element type
     if (isValid && s.getVideoTracks().length > 0) {
       elType = 'video';
+    }
+
+    // if we have been passed an "unplayable" target create a new element
+    if (el && typeof el.play != 'function') {
+      el = null;
     }
 
     // prepare the element
@@ -1301,20 +1344,12 @@ var attach = module.exports = function(stream, opts, callback) {
       el.mozSrcObject = stream;
     }
 
-    if ((o || {}).muted) {
-      el.muted = true;
-      el.setAttribute('muted', '');
-    }
-
-    if ((o || {}).mirror) {
-      el.style.transform = 'scale(-1, 1)';
-    }
-
     if (autoplay === undefined || autoplay) {
+      el.setAttribute('autoplay', '');
       el.play();
     }
 
-    return el;
+    return applyModifications(el, o);
   }
 
   // see if we are using a plugin
@@ -1329,7 +1364,7 @@ var attach = module.exports = function(stream, opts, callback) {
         return callback(new Error('plugin must support the attach function'));
       }
 
-      callback(null, pinst.attach(stream, opts));
+      callback(null, applyModifications(pinst.attach(stream, opts), opts));
     });
   }
 
@@ -1598,6 +1633,7 @@ var debug = rtc.logger('rtc-quickconnect');
 var defaults = require('cog/defaults');
 var extend = require('cog/extend');
 var getable = require('cog/getable');
+var messenger = require('./messenger');
 var reTrailingSlash = /\/$/;
 
 /**
@@ -1696,13 +1732,14 @@ var reTrailingSlash = /\/$/;
 **/
 module.exports = function(signalhost, opts) {
   var hash = typeof location != 'undefined' && location.hash.slice(1);
-  var signaller = require('rtc-signaller')(signalhost, opts);
+  var signaller = require('rtc-signaller')(messenger(signalhost), opts);
 
   // init configurable vars
   var ns = (opts || {}).ns || '';
   var room = (opts || {}).room;
   var debugging = (opts || {}).debug;
   var allowJoin = !(opts || {}).manualJoin;
+  var heartbeat = (opts || {}).heartbeat || 2500;
   var profile = {};
   var announced = false;
 
@@ -1727,14 +1764,16 @@ module.exports = function(signalhost, opts) {
   // check how many local streams have been expected (default: 0)
   var expectedLocalStreams = parseInt((opts || {}).expectedLocalStreams, 10) || 0;
   var announceTimer = 0;
+  var heartbeatTimer = 0;
+  var updateTimer = 0;
 
-  function callCreate(id, pc, data) {
+  function callCreate(id, pc) {
     calls.set(id, {
       active: false,
       pc: pc,
       channels: getable({}),
-      data: data,
-      streams: []
+      streams: [],
+      lastping: Date.now()
     });
   }
 
@@ -1771,6 +1810,11 @@ module.exports = function(signalhost, opts) {
     // delete the call data
     calls.delete(id);
 
+    // if we have no more calls, disable the heartbeat
+    if (calls.keys().length === 0) {
+      hbReset();
+    }
+
     // trigger the call:ended event
     signaller('call:ended', id, call.pc);
 
@@ -1791,6 +1835,9 @@ module.exports = function(signalhost, opts) {
 
     debug(signaller.id + ' - ' + id + ' call start: ' + streams.length + ' streams');
     signaller('call:started', id, pc, data);
+
+    // configure the heartbeat timer
+    hbInit();
 
     // examine the existing remote streams after a short delay
     process.nextTick(function() {
@@ -1828,12 +1875,88 @@ module.exports = function(signalhost, opts) {
 
     // announce ourselves to our new friend
     announceTimer = setTimeout(function() {
-      var data = extend({}, profile, { room: room });
+      var data = extend({ room: room }, profile);
 
       // announce and emit the local announce event
       signaller.announce(data);
       announced = true;
     }, 0);
+  }
+
+ function connect(id) {
+    var data = getPeerData(id);
+    var pc;
+    var monitor;
+
+    // if the room is not a match, abort
+    if (data.room !== room) {
+      return;
+    }
+
+    // end any call to this id so we know we are starting fresh
+    callEnd(id);
+
+    // create a peer connection
+    // iceServers that have been created using genice taking precendence
+    pc = rtc.createConnection(
+      extend({}, opts, { iceServers: iceServers }),
+      (opts || {}).constraints
+    );
+
+    signaller('peer:connect', data.id, pc, data);
+
+    // add this connection to the calls list
+    callCreate(data.id, pc);
+
+    // add the local streams
+    localStreams.forEach(function(stream, idx) {
+      pc.addStream(stream);
+    });
+
+    // add the data channels
+    // do this differently based on whether the connection is a
+    // master or a slave connection
+    if (signaller.isMaster(data.id)) {
+      debug('is master, creating data channels: ', Object.keys(channels));
+
+      // create the channels
+      Object.keys(channels).forEach(function(label) {
+       gotPeerChannel(pc.createDataChannel(label, channels[label]), pc, data);
+      });
+    }
+    else {
+      pc.ondatachannel = function(evt) {
+        var channel = evt && evt.channel;
+
+        // if we have no channel, abort
+        if (! channel) {
+          return;
+        }
+
+        if (channels[channel.label] !== undefined) {
+          gotPeerChannel(channel, pc, getPeerData(id));
+        }
+      };
+    }
+
+    // couple the connections
+    debug('coupling ' + signaller.id + ' to ' + data.id);
+    monitor = rtc.couple(pc, id, signaller, extend({}, opts, {
+      logger: mbus('pc.' + id, signaller)
+    }));
+
+    signaller('peer:couple', id, pc, data, monitor);
+
+    // once active, trigger the peer connect event
+    monitor.once('connected', callStart.bind(null, id, pc, data))
+    monitor.once('closed', callEnd.bind(null, id));
+
+    // if we are the master connnection, create the offer
+    // NOTE: this only really for the sake of politeness, as rtc couple
+    // implementation handles the slave attempting to create an offer
+    if (signaller.isMaster(id)) {
+      monitor.createOffer();
+    }
   }
 
   function createStreamAddHandler(id) {
@@ -1860,6 +1983,12 @@ module.exports = function(signalhost, opts) {
     }
 
     return call;
+  }
+
+  function getPeerData(id) {
+    var peer = signaller.peers.get(id);
+
+    return peer && peer.data;
   }
 
   function gotPeerChannel(channel, pc, data) {
@@ -1909,6 +2038,37 @@ module.exports = function(signalhost, opts) {
     }, 500);
   }
 
+  function hbInit() {
+    // if the heartbeat timer is active, or heartbeat has been disabled (0, false, etc) return
+    if (heartbeatTimer || (! heartbeat)) {
+      return;
+    }
+
+    heartbeatTimer = setInterval(hbSend, heartbeat);
+  }
+
+  function hbSend() {
+    var tickInactive = (Date.now() - (heartbeat * 4));
+
+    // iterate through our established calls
+    calls.keys().forEach(function(id) {
+      var call = calls.get(id);
+
+      // if the call ping is too old, end the call
+      if (call.lastping < tickInactive) {
+        return callEnd(id);
+      }
+
+      // send a ping message
+      signaller.to(id).send('/ping');
+    });
+  }
+
+  function hbReset() {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = 0;
+  }
+
   function initPlugin() {
     return plugin && plugin.init(opts, function(err) {
       if (err) {
@@ -1927,81 +2087,9 @@ module.exports = function(signalhost, opts) {
     }
   }
 
-  function handlePeerAnnounce(data) {
-    var pc;
-    var monitor;
-
-    // if the room is not a match, abort
-    if (data.room !== room) {
-      return;
-    }
-
-    // create a peer connection
-    // iceServers that have been created using genice taking precendence
-    pc = rtc.createConnection(
-      extend({}, opts, { iceServers: iceServers }),
-      (opts || {}).constraints
-    );
-
-    signaller('peer:connect', data.id, pc, data);
-
-    // add this connection to the calls list
-    callCreate(data.id, pc, data);
-
-    // add the local streams
-    localStreams.forEach(function(stream, idx) {
-      pc.addStream(stream);
-    });
-
-    // add the data channels
-    // do this differently based on whether the connection is a
-    // master or a slave connection
-    if (signaller.isMaster(data.id)) {
-      debug('is master, creating data channels: ', Object.keys(channels));
-
-      // create the channels
-      Object.keys(channels).forEach(function(label) {
-       gotPeerChannel(pc.createDataChannel(label, channels[label]), pc, data);
-      });
-    }
-    else {
-      pc.ondatachannel = function(evt) {
-        var channel = evt && evt.channel;
-
-        // if we have no channel, abort
-        if (! channel) {
-          return;
-        }
-
-        if (channels[channel.label] !== undefined) {
-          gotPeerChannel(channel, pc, data);
-        }
-      };
-    }
-
-    // couple the connections
-    debug('coupling ' + signaller.id + ' to ' + data.id);
-    monitor = rtc.couple(pc, data.id, signaller, extend({}, opts, {
-      logger: mbus('pc.' + data.id, signaller)
-    }));
-
-    signaller('peer:couple', data.id, pc, data, monitor);
-
-    // once active, trigger the peer connect event
-    monitor.once('connected', callStart.bind(null, data.id, pc, data))
-    monitor.once('closed', callEnd.bind(null, data.id));
-
-    // if we are the master connnection, create the offer
-    // NOTE: this only really for the sake of politeness, as rtc couple
-    // implementation handles the slave attempting to create an offer
-    if (signaller.isMaster(data.id)) {
-      monitor.createOffer();
-    }
-  }
-
-  function handlePeerFilter(evt) {
+  function handlePeerFilter(id, data) {
     // only connect with the peer if we are ready
-    evt.allow = evt.allow && (localStreams.length >= expectedLocalStreams);
+    data.allow = data.allow && (localStreams.length >= expectedLocalStreams);
   }
 
   function handlePeerUpdate(data) {
@@ -2012,7 +2100,17 @@ module.exports = function(signalhost, opts) {
     // then pass this onto the announce handler
     if (id && (! activeCall)) {
       debug('received peer update from peer ' + id + ', no active calls');
-      return handlePeerAnnounce(data);
+      signaller.to(id).send('/reconnect');
+      return connect(id);
+    }
+  }
+
+  function handlePing(sender) {
+    var call = calls.get(sender && sender.id);
+
+    // set the last ping for the data
+    if (call) {
+      call.lastping = Date.now();
     }
   }
 
@@ -2020,7 +2118,7 @@ module.exports = function(signalhost, opts) {
     var call = calls.get(id);
 
     return function(stream) {
-      signaller('stream:added', id, stream, call && call.data);
+      signaller('stream:added', id, stream, getPeerData(id));
     };
   }
 
@@ -2046,8 +2144,17 @@ module.exports = function(signalhost, opts) {
     rtc.logger.enable.apply(rtc.logger, Array.isArray(debug) ? debugging : ['*']);
   }
 
-  signaller.on('peer:announce', handlePeerAnnounce);
+  signaller.on('peer:announce', function(data) {
+    connect(data.id);
+  });
+
   signaller.on('peer:update', handlePeerUpdate);
+
+  signaller.on('message:reconnect', function(sender) {
+    connect(sender.id);
+  });
+
+
 
   /**
     ### Quickconnect Broadcast and Data Channel Helper Functions
@@ -2133,7 +2240,7 @@ module.exports = function(signalhost, opts) {
       // if we are the master connection, create the data channel
       if (call && call.pc && signaller.isMaster(peerId)) {
         dc = call.pc.createDataChannel(label, opts);
-        gotPeerChannel(dc, call.pc, call.data);
+        gotPeerChannel(dc, call.pc, getPeerData(peerId));
       }
     });
 
@@ -2154,6 +2261,24 @@ module.exports = function(signalhost, opts) {
   signaller.join = function() {
     allowJoin = true;
     checkReadyToAnnounce();
+  };
+
+  /**
+    #### `get(name)`
+
+    The `get` function returns the property value for the specified property name.
+  **/
+  signaller.get = function(name) {
+    return profile[name];
+  };
+
+  /**
+    #### `getLocalStreams()`
+
+    Return a copy of the local streams that have currently been configured
+  **/
+  signaller.getLocalStreams = function() {
+    return [].concat(localStreams);
   };
 
   /**
@@ -2292,7 +2417,10 @@ module.exports = function(signalhost, opts) {
     // if we have already announced, then reannounce our profile to provide
     // others a `peer:update` event
     if (announced) {
-      signaller.announce(profile);
+      clearTimeout(updateTimer);
+      updateTimer = setTimeout(function() {
+        signaller.announce(profile);
+      }, (opts || {}).updateDelay || 1000);
     }
 
     return signaller;
@@ -2335,6 +2463,9 @@ module.exports = function(signalhost, opts) {
   // respond to local announce messages
   signaller.on('local:announce', handleLocalAnnounce);
 
+  // handle ping messages
+  signaller.on('message:ping', handlePing);
+
   // use genice to find our iceServers
   require('rtc-core/genice')(opts, function(err, servers) {
     if (err) {
@@ -2355,7 +2486,16 @@ module.exports = function(signalhost, opts) {
 };
 
 }).call(this,require('_process'))
-},{"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":23,"rtc-core/genice":19,"rtc-core/plugin":21,"rtc-signaller":26,"rtc-tools":41,"rtc-tools/cleanup":37}],23:[function(require,module,exports){
+},{"./messenger":23,"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":24,"rtc-core/genice":19,"rtc-core/plugin":21,"rtc-signaller":30,"rtc-tools":59,"rtc-tools/cleanup":55}],23:[function(require,module,exports){
+module.exports = function(messenger) {
+  if (typeof messenger == 'function') {
+    return messenger;
+  }
+
+  return require('rtc-switchboard-messenger')(messenger);
+};
+
+},{"rtc-switchboard-messenger":46}],24:[function(require,module,exports){
 var createTrie = require('array-trie');
 var reDelim = /[\.\:]/;
 
@@ -2452,7 +2592,7 @@ var createBus = module.exports = function(namespace, parent, scope) {
   }
 
   function getNameParts(name) {
-    return Array.isArray(name) ? name : name.split(reDelim);
+    return Array.isArray(name) ? name : (name ? name.split(reDelim) : []);
   }
 
   /**
@@ -2524,7 +2664,7 @@ var createBus = module.exports = function(namespace, parent, scope) {
   return bus;
 };
 
-},{"array-trie":25}],24:[function(require,module,exports){
+},{"array-trie":26}],25:[function(require,module,exports){
 "use strict"
 
 function compileSearch(funcName, predicate, reversed, extraArgs, useNdarray, earlyOut) {
@@ -2586,7 +2726,7 @@ module.exports = {
   eq: compileBoundsSearch("-", true, "EQ", true)
 }
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 "use strict"
 
 var bounds = require("binary-search-bounds")
@@ -2674,16 +2814,7 @@ proto.get = function(s) {
 function createTrie() {
   return new Trie([],[])
 }
-},{"binary-search-bounds":24}],26:[function(require,module,exports){
-var extend = require('cog/extend');
-
-module.exports = function(messenger, opts) {
-  return require('./signaller.js')(messenger, extend({
-    connect: require('./primus-loader')
-  }, opts));
-};
-
-},{"./primus-loader":34,"./signaller.js":36,"cog/extend":6}],27:[function(require,module,exports){
+},{"binary-search-bounds":25}],27:[function(require,module,exports){
 module.exports = {
   // messenger events
   dataEvent: 'data',
@@ -2703,9 +2834,7 @@ module.exports = {
 /* jshint node: true */
 'use strict';
 
-var debug = require('cog/logger')('rtc-signaller');
 var extend = require('cog/extend');
-var roles = ['a', 'b'];
 
 /**
   #### announce
@@ -2720,32 +2849,16 @@ var roles = ['a', 'b'];
 **/
 module.exports = function(signaller) {
 
-  function copyData(target, source) {
-    if (target && source) {
-      for (var key in source) {
-        target[key] = source[key];
-      }
-    }
-
-    return target;
-  }
-
   function dataAllowed(data) {
-    var evt = {
-      data: data,
-      allow: true
-    };
+    var cloned = extend({ allow: true }, data);
+    signaller('peer:filter', data.id, cloned);
 
-    signaller('peer:filter', evt);
-
-    return evt.allow;
+    return cloned.allow;
   }
 
   return function(args, messageType, srcData, srcState, isDM) {
     var data = args[0];
     var peer;
-
-    debug('announce handler invoked, received data: ', data);
 
     // if we have valid data then process
     if (data && data.id && data.id !== signaller.id) {
@@ -2762,10 +2875,8 @@ module.exports = function(signaller) {
 
       // if the peer is existing, then update the data
       if (peer && (! peer.inactive)) {
-        debug('signaller: ' + signaller.id + ' received update, data: ', data);
-
         // update the data
-        copyData(peer.data, data);
+        extend(peer.data, data);
 
         // trigger the peer update event
         return signaller('peer:update', data, srcData);
@@ -2783,7 +2894,7 @@ module.exports = function(signaller) {
       };
 
       // initialise the peer data
-      copyData(peer.data, data);
+      extend(peer.data, data);
 
       // reset inactivity state
       clearTimeout(peer.leaveTimer);
@@ -2806,7 +2917,7 @@ module.exports = function(signaller) {
   };
 };
 
-},{"cog/extend":6,"cog/logger":9}],29:[function(require,module,exports){
+},{"cog/extend":6}],29:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -2817,45 +2928,448 @@ module.exports = function(signaller) {
 
 module.exports = function(signaller, opts) {
   return {
-    announce: require('./announce')(signaller, opts),
-    leave: require('./leave')(signaller, opts)
+    announce: require('./announce')(signaller, opts)
   };
 };
-},{"./announce":28,"./leave":30}],30:[function(require,module,exports){
+
+},{"./announce":28}],30:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
-/**
-  #### leave
+var detect = require('rtc-core/detect');
+var defaults = require('cog/defaults');
+var extend = require('cog/extend');
+var mbus = require('mbus');
+var getable = require('cog/getable');
+var uuid = require('cuid');
+var pull = require('pull-stream');
+var pushable = require('pull-pushable');
 
-  ```
-  /leave|{"id":"..."}
-  ```
+// ready state constants
+var RS_DISCONNECTED = 0;
+var RS_CONNECTING = 1;
+var RS_CONNECTED = 2;
 
-  When a leave message is received from a peer, we check to see if that is
-  a peer that we are managing state information for and if we are then the
-  peer state is removed.
-
-**/
-module.exports = function(signaller, opts) {
-  return function(args) {
-    var data = args[0];
-    var peer = signaller.peers.get(data && data.id);
-
-    if (peer) {
-      // start the inactivity timer
-      peer.leaveTimer = setTimeout(function() {
-        peer.inactive = true;
-        signaller('peer:leave', data.id, peer);
-      }, opts.leaveTimeout);
-    }
-
-    // emit the event
-    signaller('peer:disconnected', data.id, peer);
-  };
+// initialise signaller metadata so we don't have to include the package.json
+// TODO: make this checkable with some kind of prepublish script
+var metadata = {
+  version: '5.2.2'
 };
 
-},{}],31:[function(require,module,exports){
+/**
+  # rtc-signaller
+
+  The `rtc-signaller` module provides a transportless signalling
+  mechanism for WebRTC.
+
+  ## Purpose
+
+  <<< docs/purpose.md
+
+  ## Getting Started
+
+  While the signaller is capable of communicating by a number of different
+  messengers (i.e. anything that can send and receive messages over a wire)
+  it comes with support for understanding how to connect to an
+  [rtc-switchboard](https://github.com/rtc-io/rtc-switchboard) out of the box.
+
+  The following code sample demonstrates how:
+
+  <<< examples/getting-started.js
+
+  <<< docs/events.md
+
+  <<< docs/signalflow-diagrams.md
+
+  ## Reference
+
+  The `rtc-signaller` module is designed to be used primarily in a functional
+  way and when called it creates a new signaller that will enable
+  you to communicate with other peers via your messaging network.
+
+  ```js
+  // create a signaller from something that knows how to send messages
+  var signaller = require('rtc-signaller')(messenger);
+  ```
+
+  As demonstrated in the getting started guide, you can also pass through
+  a string value instead of a messenger instance if you simply want to
+  connect to an existing `rtc-switchboard` instance.
+
+**/
+module.exports = function(messenger, opts) {
+  // get the autoreply setting
+  var autoreply = (opts || {}).autoreply;
+  var autoconnect = (opts || {}).autoconnect;
+  var reconnect = (opts || {}).reconnect;
+
+  // initialise the metadata
+  var localMeta = {};
+
+  // create the signaller
+  var signaller = mbus('', (opts || {}).logger);
+
+  // initialise the id
+  var id = signaller.id = (opts || {}).id || uuid();
+
+  // initialise the attributes
+  var attributes = signaller.attributes = {
+    browser: detect.browser,
+    browserVersion: detect.browserVersion,
+    id: id,
+    agent: 'signaller@' + metadata.version
+  };
+
+  // create the peers map
+  var peers = signaller.peers = getable({});
+
+  // create the outbound message queue
+  var queue = require('pull-pushable')();
+
+  var processor;
+  var announceTimer = 0;
+  var readyState = RS_DISCONNECTED;
+
+  function announceOnReconnect() {
+    signaller.announce();
+  }
+
+  function bufferMessage(args) {
+    queue.push(createDataLine(args));
+
+    // if we are not connected (and should autoconnect), then attempt connection
+    if (readyState === RS_DISCONNECTED && (autoconnect === undefined || autoconnect)) {
+      connect();
+    }
+  }
+
+  function createDataLine(args) {
+    return args.map(prepareArg).join('|');
+  }
+
+  function createMetadata() {
+    return extend({}, localMeta, { id: signaller.id });
+  }
+
+  function handleDisconnect() {
+    if (reconnect === undefined || reconnect) {
+      setTimeout(connect, 50);
+    }
+  }
+
+  function prepareArg(arg) {
+    if (typeof arg == 'object' && (! (arg instanceof String))) {
+      return JSON.stringify(arg);
+    }
+    else if (typeof arg == 'function') {
+      return null;
+    }
+
+    return arg;
+  }
+
+  /**
+    ### `signaller.connect()`
+
+    Manually connect the signaller using the supplied messenger.
+
+    __NOTE:__ This should never have to be called if the default setting
+    for `autoconnect` is used.
+  **/
+  var connect = signaller.connect = function() {
+    // if we are already connecting then do nothing
+    if (readyState === RS_CONNECTING) {
+      return;
+    }
+
+    // initiate the messenger
+    readyState = RS_CONNECTING;
+    messenger(function(err, source, sink) {
+      if (err) {
+        readyState = RS_DISCONNECTED;
+        return signaller('error', err);
+      }
+
+      // flag as connected
+      readyState = RS_CONNECTED;
+
+      // pass messages to the processor
+      pull(
+        source,
+
+        // monitor disconnection
+        pull.through(null, function() {
+          readyState = RS_DISCONNECTED;
+          signaller('disconnected');
+        }),
+        pull.drain(processor)
+      );
+
+      // pass the queue to the sink
+      pull(queue, sink);
+
+      // handle disconnection
+      signaller.removeListener('disconnected', handleDisconnect);
+      signaller.on('disconnected', handleDisconnect);
+
+      // trigger the connected event
+      signaller('connected');
+    });
+  };
+
+  /**
+    ### signaller#send(message, data*)
+
+    Use the send function to send a message to other peers in the current
+    signalling scope (if announced in a room this will be a room, otherwise
+    broadcast to all peers connected to the signalling server).
+
+  **/
+  var send = signaller.send = function() {
+    // iterate over the arguments and stringify as required
+    // var metadata = { id: signaller.id };
+    var args = [].slice.call(arguments);
+
+    // inject the metadata
+    args.splice(1, 0, createMetadata());
+    bufferMessage(args);
+  };
+
+  /**
+    ### announce(data?)
+
+    The `announce` function of the signaller will pass an `/announce` message
+    through the messenger network.  When no additional data is supplied to
+    this function then only the id of the signaller is sent to all active
+    members of the messenging network.
+
+    #### Joining Rooms
+
+    To join a room using an announce call you simply provide the name of the
+    room you wish to join as part of the data block that you annouce, for
+    example:
+
+    ```js
+    signaller.announce({ room: 'testroom' });
+    ```
+
+    Signalling servers (such as
+    [rtc-switchboard](https://github.com/rtc-io/rtc-switchboard)) will then
+    place your peer connection into a room with other peers that have also
+    announced in this room.
+
+    Once you have joined a room, the server will only deliver messages that
+    you `send` to other peers within that room.
+
+    #### Providing Additional Announce Data
+
+    There may be instances where you wish to send additional data as part of
+    your announce message in your application.  For instance, maybe you want
+    to send an alias or nick as part of your announce message rather than just
+    use the signaller's generated id.
+
+    If for instance you were writing a simple chat application you could join
+    the `webrtc` room and tell everyone your name with the following announce
+    call:
+
+    ```js
+    signaller.announce({
+      room: 'webrtc',
+      nick: 'Damon'
+    });
+    ```
+
+    #### Announcing Updates
+
+    The signaller is written to distinguish between initial peer announcements
+    and peer data updates (see the docs on the announce handler below). As
+    such it is ok to provide any data updates using the announce method also.
+
+    For instance, I could send a status update as an announce message to flag
+    that I am going offline:
+
+    ```js
+    signaller.announce({ status: 'offline' });
+    ```
+
+  **/
+  signaller.announce = function(data, sender) {
+
+    function sendAnnounce() {
+      (sender || send)('/announce', attributes);
+      signaller('local:announce', attributes);
+    }
+
+    // if we are already connected, then ensure we announce on reconnect
+    if (readyState === RS_CONNECTED) {
+      // always announce on reconnect
+      signaller.removeListener('connected', announceOnReconnect);
+      signaller.on('connected', announceOnReconnect);
+    }
+
+    clearTimeout(announceTimer);
+
+    // update internal attributes
+    extend(attributes, data, { id: signaller.id });
+
+    // send the attributes over the network
+    return announceTimer = setTimeout(sendAnnounce, (opts || {}).announceDelay || 10);
+  };
+
+  /**
+    ### isMaster(targetId)
+
+    A simple function that indicates whether the local signaller is the master
+    for it's relationship with peer signaller indicated by `targetId`.  Roles
+    are determined at the point at which signalling peers discover each other,
+    and are simply worked out by whichever peer has the lowest signaller id
+    when lexigraphically sorted.
+
+    For example, if we have two signaller peers that have discovered each
+    others with the following ids:
+
+    - `b11f4fd0-feb5-447c-80c8-c51d8c3cced2`
+    - `8a07f82e-49a5-4b9b-a02e-43d911382be6`
+
+    They would be assigned roles:
+
+    - `b11f4fd0-feb5-447c-80c8-c51d8c3cced2`
+    - `8a07f82e-49a5-4b9b-a02e-43d911382be6` (master)
+
+  **/
+  signaller.isMaster = function(targetId) {
+    var peer = peers.get(targetId);
+
+    return peer && peer.roleIdx !== 0;
+  };
+
+  /**
+    ### leave()
+
+    Tell the signalling server we are leaving.  Calling this function is
+    usually not required though as the signalling server should issue correct
+    `/leave` messages when it detects a disconnect event.
+
+  **/
+  signaller.leave = signaller.close = function() {
+    // send the leave signal
+    send('/leave', { id: id });
+
+    // stop announcing on reconnect
+    signaller.removeListener('disconnected', handleDisconnect);
+    signaller.removeListener('connected', announceOnReconnect);
+
+    // end our current queue
+    queue.end();
+
+    // create a new queue to buffer new messages
+    queue = pushable();
+
+    // set connected to false
+    readyState = RS_DISCONNECTED;
+  };
+
+  /**
+    ### metadata(data?)
+
+    Get (pass no data) or set the metadata that is passed through with each
+    request sent by the signaller.
+
+    __NOTE:__ Regardless of what is passed to this function, metadata
+    generated by the signaller will **always** include the id of the signaller
+    and this cannot be modified.
+  **/
+  signaller.metadata = function(data) {
+    if (arguments.length === 0) {
+      return extend({}, localMeta);
+    }
+
+    localMeta = extend({}, data);
+  };
+
+  /**
+    ### to(targetId)
+
+    Use the `to` function to send a message to the specified target peer.
+    A large parge of negotiating a WebRTC peer connection involves direct
+    communication between two parties which must be done by the signalling
+    server.  The `to` function provides a simple way to provide a logical
+    communication channel between the two parties:
+
+    ```js
+    var send = signaller.to('e95fa05b-9062-45c6-bfa2-5055bf6625f4').send;
+
+    // create an offer on a local peer connection
+    pc.createOffer(
+      function(desc) {
+        // set the local description using the offer sdp
+        // if this occurs successfully send this to our peer
+        pc.setLocalDescription(
+          desc,
+          function() {
+            send('/sdp', desc);
+          },
+          handleFail
+        );
+      },
+      handleFail
+    );
+    ```
+
+  **/
+  signaller.to = function(targetId) {
+    // create a sender that will prepend messages with /to|targetId|
+    var sender = function() {
+      // get the peer (yes when send is called to make sure it hasn't left)
+      var peer = signaller.peers.get(targetId);
+      var args;
+
+      if (! peer) {
+        throw new Error('Unknown peer: ' + targetId);
+      }
+
+      // if the peer is inactive, then abort
+      if (peer.inactive) {
+        return;
+      }
+
+      args = [
+        '/to',
+        targetId
+      ].concat([].slice.call(arguments));
+
+      // inject metadata
+      args.splice(3, 0, createMetadata());
+      bufferMessage(args);
+    };
+
+    return {
+      announce: function(data) {
+        return signaller.announce(data, sender);
+      },
+
+      send: sender,
+    };
+  };
+
+  // initialise opts defaults
+  opts = defaults({}, opts, require('./defaults'));
+
+  // set the autoreply flag
+  signaller.autoreply = autoreply === undefined || autoreply;
+
+  // create the processor
+  signaller.process = processor = require('./processor')(signaller, opts);
+
+  // autoconnect
+  if (autoconnect === undefined || autoconnect) {
+    connect();
+  }
+
+  return signaller;
+};
+
+},{"./defaults":27,"./processor":45,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cuid":31,"mbus":24,"pull-pushable":32,"pull-stream":39,"rtc-core/detect":18}],31:[function(require,module,exports){
 /**
  * cuid.js
  * Collision-resistant UID generator for browsers and node.
@@ -2968,385 +3482,1419 @@ module.exports = function(signaller, opts) {
 }(this.applitude || this));
 
 },{}],32:[function(require,module,exports){
-/* jshint node: true */
-'use strict';
+var pull = require('pull-stream')
 
-var reVariable = /\{\{\s*([^\}]+?)\s*\}\}/;
-var mods = require('./mods');
+module.exports = pull.Source(function (onClose) {
+  var buffer = [], cbs = [], waiting = [], ended
 
-/**
-  # formatter
-
-  This is a simple library designed to do one thing and one thing only -
-  replace variables in strings with variable values.  It is built in such a
-  way that the formatter strings are parsed and you are provided with a
-  function than can efficiently be called to provide the custom output.
-
-  ## Example Usage
-
-  <<< examples/likefood.js
-
-  __NOTE__: Formatter is not designed to be a templating library and if
-  you are already using something like Handlebars or
-  [hogan](https://github.com/twitter/hogan.js) in your library or application
-  stack consider using them instead.
-
-  ## Using named variables
-
-  In the examples above we saw how the formatter can be used to replace
-  function arguments in a formatter string.  We can also set up a formatter
-  to use particular key values from an input string instead if that is more
-  suitable:
-
-  <<< examples/likefood-named.js
-
-  ## Nested Property Values
-
-  Since version `0.1.0` you can also access nested property values, as you
-  can with templates like handlebars.
-
-  ## Partial Execution
-
-  Since version `0.3.x` formatter also supports partial execution when using
-  indexed arguments (e.g. `{{ 0 }}`, `{{ 1 }}`, etc).  For example:
-
-  <<< examples/partial.js
-
-  In the case above, the original formatter function returned by `formatter`
-  did not receive enough values to resolve all the required variables.  As
-  such it returned a function ready to accept the remaining values.
-
-  Once all values have been received the output will be generated.
-
-  ## Performance
-
-  I've done some
-  [performance benchmarks](http://jsperf.com/formatter-performance) and
-  formatter is faster than handlebars, but that isn't surprising as it is far
-  simpler and doesn't have the smarts of HBS.  The test is really there to
-  ensure that I didn't do anything too silly...
-
-  Additionally, it should be noted that using formatter is 100% slower than
-  concatenating strings, so don't use it where performance is critical. 
-  Do use it where not repeating yourself is.
-**/
-
-var formatter = module.exports = function(format, opts) {
-  // extract the matches from the string
-  var parts = [];
-  var output = [];
-  var chunk;
-  var varname;
-  var varParts;
-  var match = reVariable.exec(format);
-  var isNumeric;
-  var outputIdx = 0;
-  var ignoreNumeric = (opts || {}).ignoreNumeric;
-
-  while (match) {
-    // get the prematch chunk
-    chunk = format.slice(0, match.index);
-    
-    // if we have a valid chunk, add it to the parts
-    if (chunk) {
-      output[outputIdx++] = chunk;
+  function drain() {
+    var l
+    while(waiting.length && ((l = buffer.length) || ended)) {
+      var data = buffer.shift()
+      var cb   = cbs.shift()
+      waiting.shift()(l ? null : ended, data)
+      cb && cb(ended === true ? null : ended)
     }
-    
-    varParts = match[1].split(/\s*\|\s*/);
-    match[1] = varParts[0];
-    
-    // extract the varname
-    varname = parseInt(match[1], 10);
-    isNumeric = !isNaN(varname);
-
-    // if this is a numeric replacement expression, and we are ignoring
-    // those expressions then pass it through to the output
-    if (ignoreNumeric && isNumeric) {
-      output[outputIdx++] = match[0];
-    }
-    // otherwise, handle normally
-    else {
-      // extract the expression and add it as a function
-      parts[parts.length] = {
-        idx: (outputIdx++),
-        numeric: isNumeric,
-        varname: isNumeric ? varname : match[1],
-        modifiers: varParts.length > 1 ? createModifiers(varParts.slice(1)) : []
-      };
-    }
-
-    // remove this matched chunk and replacer from the string
-    format = format.slice(match.index + match[0].length);
-
-    // check for the next match
-    match = reVariable.exec(format);
-  }
-  
-  // if we still have some of the format string remaining, add it to the list
-  if (format) {
-    output[outputIdx++] = format;
   }
 
-  return collect(parts, output);
-};
+  function read (end, cb) {
+    ended = ended || end
+    waiting.push(cb)
+    drain()
+    if(ended)
+      onClose && onClose(ended === true ? null : ended)
+  }
 
-formatter.error = function(message) {
-  // create the format
-  var format = formatter(message);
-  
-  return function(err) {
-    var output;
+  read.push = function (data, cb) {
+    if(ended)
+      return cb && cb(ended === true ? null : ended)
+    buffer.push(data); cbs.push(cb)
+    drain()
+  }
+
+  read.end = function (end, cb) {
+    if('function' === typeof end)
+      cb = end, end = true
+    ended = ended || end || true;
+    if(cb) cbs.push(cb)
+    drain()
+    if(ended)
+      onClose && onClose(ended === true ? null : ended)
+  }
+
+  return read
+})
+
+
+},{"pull-stream":33}],33:[function(require,module,exports){
+
+var sources  = require('./sources')
+var sinks    = require('./sinks')
+var throughs = require('./throughs')
+var u        = require('pull-core')
+
+for(var k in sources)
+  exports[k] = u.Source(sources[k])
+
+for(var k in throughs)
+  exports[k] = u.Through(throughs[k])
+
+for(var k in sinks)
+  exports[k] = u.Sink(sinks[k])
+
+var maybe = require('./maybe')(exports)
+
+for(var k in maybe)
+  exports[k] = maybe[k]
+
+exports.Duplex  = 
+exports.Through = exports.pipeable       = u.Through
+exports.Source  = exports.pipeableSource = u.Source
+exports.Sink    = exports.pipeableSink   = u.Sink
+
+
+
+},{"./maybe":34,"./sinks":36,"./sources":37,"./throughs":38,"pull-core":35}],34:[function(require,module,exports){
+var u = require('pull-core')
+var prop = u.prop
+var id   = u.id
+var maybeSink = u.maybeSink
+
+module.exports = function (pull) {
+
+  var exports = {}
+  var drain = pull.drain
+
+  var find = 
+  exports.find = function (test, cb) {
+    return maybeSink(function (cb) {
+      var ended = false
+      if(!cb)
+        cb = test, test = id
+      else
+        test = prop(test) || id
+
+      return drain(function (data) {
+        if(test(data)) {
+          ended = true
+          cb(null, data)
+        return false
+        }
+      }, function (err) {
+        if(ended) return //already called back
+        cb(err === true ? null : err, null)
+      })
+
+    }, cb)
+  }
+
+  var reduce = exports.reduce = 
+  function (reduce, acc, cb) {
     
-    // if no error has been supplied, then pass it straight through
-    if (! err) {
-      return;
+    return maybeSink(function (cb) {
+      return drain(function (data) {
+        acc = reduce(acc, data)
+      }, function (err) {
+        cb(err, acc)
+      })
+
+    }, cb)
+  }
+
+  var collect = exports.collect = exports.writeArray =
+  function (cb) {
+    return reduce(function (arr, item) {
+      arr.push(item)
+      return arr
+    }, [], cb)
+  }
+
+  return exports
+}
+
+},{"pull-core":35}],35:[function(require,module,exports){
+exports.id = 
+function (item) {
+  return item
+}
+
+exports.prop = 
+function (map) {  
+  if('string' == typeof map) {
+    var key = map
+    return function (data) { return data[key] }
+  }
+  return map
+}
+
+exports.tester = function (test) {
+  if(!test) return exports.id
+  if('object' === typeof test
+    && 'function' === typeof test.test)
+      return test.test.bind(test)
+  return exports.prop(test) || exports.id
+}
+
+exports.addPipe = addPipe
+
+function addPipe(read) {
+  if('function' !== typeof read)
+    return read
+
+  read.pipe = read.pipe || function (reader) {
+    if('function' != typeof reader)
+      throw new Error('must pipe to reader')
+    return addPipe(reader(read))
+  }
+  read.type = 'Source'
+  return read
+}
+
+var Source =
+exports.Source =
+function Source (createRead) {
+  function s() {
+    var args = [].slice.call(arguments)
+    return addPipe(createRead.apply(null, args))
+  }
+  s.type = 'Source'
+  return s
+}
+
+
+var Through =
+exports.Through = 
+function (createRead) {
+  return function () {
+    var args = [].slice.call(arguments)
+    var piped = []
+    function reader (read) {
+      args.unshift(read)
+      read = createRead.apply(null, args)
+      while(piped.length)
+        read = piped.shift()(read)
+      return read
+      //pipeing to from this reader should compose...
     }
+    reader.pipe = function (read) {
+      piped.push(read) 
+      if(read.type === 'Source')
+        throw new Error('cannot pipe ' + reader.type + ' to Source')
+      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
+      return reader
+    }
+    reader.type = 'Through'
+    return reader
+  }
+}
 
-    output = new Error(
-      format.apply(null, Array.prototype.slice.call(arguments, 1)));
+var Sink =
+exports.Sink = 
+function Sink(createReader) {
+  return function () {
+    var args = [].slice.call(arguments)
+    if(!createReader)
+      throw new Error('must be createReader function')
+    function s (read) {
+      args.unshift(read)
+      return createReader.apply(null, args)
+    }
+    s.type = 'Sink'
+    return s
+  }
+}
 
-    output._original = err;
 
-    // return the new error
-    return output;
-  };
-};
+exports.maybeSink = 
+exports.maybeDrain = 
+function (createSink, cb) {
+  if(!cb)
+    return Through(function (read) {
+      var ended
+      return function (close, cb) {
+        if(close) return read(close, cb)
+        if(ended) return cb(ended)
 
-function collect(parts, resolved, indexShift) {
-  // default optionals
-  indexShift = indexShift || 0;
+        createSink(function (err, data) {
+          ended = err || true
+          if(!err) cb(null, data)
+          else     cb(ended)
+        }) (read)
+      }
+    })()
 
-  return function() {
-    var output = [].concat(resolved);
-    var unresolved;
-    var ii;
-    var part;
-    var partIdx;
-    var propNames;
-    var val;
-    var numericResolved = [];
+  return Sink(function (read) {
+    return createSink(cb) (read)
+  })()
+}
 
-    // find the unresolved parts
-    unresolved = parts.filter(function(part) {
-      return typeof output[part.idx] == 'undefined';
-    });
 
-    // initialise the counter
-    ii = unresolved.length;
+},{}],36:[function(require,module,exports){
+var drain = exports.drain = function (read, op, done) {
 
-    // iterate through the unresolved parts and attempt to resolve the value
-    for (; ii--; ) {
-      part = unresolved[ii];
-
-      if (typeof part == 'object') {
-        // if this is a numeric part, this is a simple index lookup
-        if (part.numeric) {
-          partIdx = part.varname - indexShift;
-          if (arguments.length > partIdx) {
-            output[part.idx] = arguments[partIdx];
-            if (numericResolved.indexOf(part.varname) < 0) {
-              numericResolved[numericResolved.length] = part.varname;
-            }
-          }
+  ;(function next() {
+    var loop = true, cbed = false
+    while(loop) {
+      cbed = false
+      read(null, function (end, data) {
+        cbed = true
+        if(end) {
+          loop = false
+          done && done(end === true ? null : end)
         }
-        // otherwise, we are doing a recursive property search
-        else if (arguments.length > 0) {
-          propNames = (part.varname || '').split('.');
-
-          // initialise the output from the last valid argument
-          output[part.idx] = (arguments[arguments.length - 1] || {});
-          while (output[part.idx] && propNames.length > 0) {
-            val = output[part.idx][propNames.shift()];
-            output[part.idx] = typeof val != 'undefined' ? val : '';
-          }
+        else if(op && false === op(data)) {
+          loop = false
+          read(true, done || function () {})
         }
-
-        // if the output was resolved, then apply the modifier
-        if (typeof output[part.idx] != 'undefined' && part.modifiers) {
-          output[part.idx] = applyModifiers(part.modifiers, output[part.idx]);
+        else if(!loop){
+          next()
         }
+      })
+      if(!cbed) {
+        loop = false
+        return
       }
     }
-
-    // reasses unresolved (only caring about numeric parts)
-    unresolved = parts.filter(function(part) {
-      return part.numeric && typeof output[part.idx] == 'undefined';
-    });
-
-    // if we have no unresolved parts, then return the value
-    if (unresolved.length === 0) {
-      return output.join('');
-    }
-
-    // otherwise, return the collect function again
-    return collect(
-      parts,
-      output,
-      indexShift + numericResolved.length
-    );
-  };
+  })()
 }
 
-function applyModifiers(modifiers, value) {
-  // if we have modifiers, then tweak the output
-  for (var ii = 0, count = modifiers.length; ii < count; ii++) {
-    value = modifiers[ii](value);
+var onEnd = exports.onEnd = function (read, done) {
+  return drain(read, null, done)
+}
+
+var log = exports.log = function (read, done) {
+  return drain(read, function (data) {
+    console.log(data)
+  }, done)
+}
+
+
+},{}],37:[function(require,module,exports){
+
+var keys = exports.keys =
+function (object) {
+  return values(Object.keys(object))
+}
+
+var once = exports.once =
+function (value) {
+  return function (abort, cb) {
+    if(abort) return cb(abort)
+    if(value != null) {
+      var _value = value; value = null
+      cb(null, _value)
+    } else
+      cb(true)
+  }
+}
+
+var values = exports.values = exports.readArray =
+function (array) {
+  if(!Array.isArray(array))
+    array = Object.keys(array).map(function (k) {
+      return array[k]
+    })
+  var i = 0
+  return function (end, cb) {
+    if(end)
+      return cb && cb(end)  
+    cb(i >= array.length || null, array[i++])
+  }
+}
+
+
+var count = exports.count = 
+function (max) {
+  var i = 0; max = max || Infinity
+  return function (end, cb) {
+    if(end) return cb && cb(end)
+    if(i > max)
+      return cb(true)
+    cb(null, i++)
+  }
+}
+
+var infinite = exports.infinite = 
+function (generate) {
+  generate = generate || Math.random
+  return function (end, cb) {
+    if(end) return cb && cb(end)
+    return cb(null, generate())
+  }
+}
+
+var defer = exports.defer = function () {
+  var _read, cbs = [], _end
+
+  var read = function (end, cb) {
+    if(!_read) {
+      _end = end
+      cbs.push(cb)
+    } 
+    else _read(end, cb)
+  }
+  read.resolve = function (read) {
+    if(_read) throw new Error('already resolved')
+    _read = read
+    if(!_read) throw new Error('no read cannot resolve!' + _read)
+    while(cbs.length)
+      _read(_end, cbs.shift())
+  }
+  read.abort = function(err) {
+    read.resolve(function (_, cb) {
+      cb(err || true)
+    })
+  }
+  return read
+}
+
+var empty = exports.empty = function () {
+  return function (abort, cb) {
+    cb(true)
+  }
+}
+
+var depthFirst = exports.depthFirst =
+function (start, createStream) {
+  var reads = []
+
+  reads.unshift(once(start))
+
+  return function next (end, cb) {
+    if(!reads.length)
+      return cb(true)
+    reads[0](end, function (end, data) {
+      if(end) {
+        //if this stream has ended, go to the next queue
+        reads.shift()
+        return next(null, cb)
+      }
+      reads.unshift(createStream(data))
+      cb(end, data)
+    })
+  }
+}
+//width first is just like depth first,
+//but push each new stream onto the end of the queue
+var widthFirst = exports.widthFirst = 
+function (start, createStream) {
+  var reads = []
+
+  reads.push(once(start))
+
+  return function next (end, cb) {
+    if(!reads.length)
+      return cb(true)
+    reads[0](end, function (end, data) {
+      if(end) {
+        reads.shift()
+        return next(null, cb)
+      }
+      reads.push(createStream(data))
+      cb(end, data)
+    })
+  }
+}
+
+//this came out different to the first (strm)
+//attempt at leafFirst, but it's still a valid
+//topological sort.
+var leafFirst = exports.leafFirst = 
+function (start, createStream) {
+  var reads = []
+  var output = []
+  reads.push(once(start))
+  
+  return function next (end, cb) {
+    reads[0](end, function (end, data) {
+      if(end) {
+        reads.shift()
+        if(!output.length)
+          return cb(true)
+        return cb(null, output.shift())
+      }
+      reads.unshift(createStream(data))
+      output.unshift(data)
+      next(null, cb)
+    })
+  }
+}
+
+
+},{}],38:[function(require,module,exports){
+(function (process){
+var u      = require('pull-core')
+var sources = require('./sources')
+var sinks = require('./sinks')
+
+var prop   = u.prop
+var id     = u.id
+var tester = u.tester
+
+var map = exports.map = 
+function (read, map) {
+  map = prop(map) || id
+  return function (end, cb) {
+    read(end, function (end, data) {
+      var data = !end ? map(data) : null
+      cb(end, data)
+    })
+  }
+}
+
+var asyncMap = exports.asyncMap =
+function (read, map) {
+  if(!map) return read
+  return function (end, cb) {
+    if(end) return read(end, cb) //abort
+    read(null, function (end, data) {
+      if(end) return cb(end, data)
+      map(data, cb)
+    })
+  }
+}
+
+var paraMap = exports.paraMap =
+function (read, map, width) {
+  if(!map) return read
+  var ended = false, queue = [], _cb
+
+  function drain () {
+    if(!_cb) return
+    var cb = _cb
+    _cb = null
+    if(queue.length)
+      return cb(null, queue.shift())
+    else if(ended && !n)
+      return cb(ended)
+    _cb = cb
   }
 
-  return value;
+  function pull () {
+    read(null, function (end, data) {
+      if(end) {
+        ended = end
+        return drain()
+      }
+      n++
+      map(data, function (err, data) {
+        n--
+
+        queue.push(data)
+        drain()
+      })
+
+      if(n < width && !ended)
+        pull()
+    })
+  }
+
+  var n = 0
+  return function (end, cb) {
+    if(end) return read(end, cb) //abort
+    //continue to read while there are less than 3 maps in flight
+    _cb = cb
+    if(queue.length || ended)
+      pull(), drain()
+    else pull()
+  }
+  return highWaterMark(asyncMap(read, map), width)
 }
 
-function createModifiers(modifierStrings) {
-  var modifiers = [];
-  var parts;
-  var fn;
-  
-  for (var ii = 0, count = modifierStrings.length; ii < count; ii++) {
-    parts = modifierStrings[ii].split(':');
-    fn = mods[parts[0].toLowerCase()];
-    
-    if (fn) {
-      modifiers[modifiers.length] = fn.apply(null, parts.slice(1));
+var filter = exports.filter =
+function (read, test) {
+  //regexp
+  test = tester(test)
+  return function next (end, cb) {
+    read(end, function (end, data) {
+      if(!end && !test(data))
+        return next(end, cb)
+      cb(end, data)
+    })
+  }
+}
+
+var filterNot = exports.filterNot =
+function (read, test) {
+  test = tester(test)
+  return filter(read, function (e) {
+    return !test(e)
+  })
+}
+
+var through = exports.through = 
+function (read, op, onEnd) {
+  var a = false
+  function once (abort) {
+    if(a || !onEnd) return
+    a = true
+    onEnd(abort === true ? null : abort)
+  }
+
+  return function (end, cb) {
+    if(end) once(end)
+    return read(end, function (end, data) {
+      if(!end) op && op(data)
+      else once(end)
+      cb(end, data)
+    })
+  }
+}
+
+var take = exports.take =
+function (read, test) {
+  var ended = false
+  if('number' === typeof test) {
+    var n = test; test = function () {
+      return n --
     }
   }
-  
-  return modifiers;
+
+  return function (end, cb) {
+    if(ended) return cb(ended)
+    if(ended = end) return read(ended, cb)
+
+    read(null, function (end, data) {
+      if(ended = ended || end) return cb(ended)
+      if(!test(data)) {
+        ended = true
+        read(true, function (end, data) {
+          cb(ended, data)
+        })
+      }
+      else
+        cb(null, data)
+    })
+  }
 }
 
-},{"./mods":33}],33:[function(require,module,exports){
+var unique = exports.unique = function (read, field, invert) {
+  field = prop(field) || id
+  var seen = {}
+  return filter(read, function (data) {
+    var key = field(data)
+    if(seen[key]) return !!invert //false, by default
+    else seen[key] = true
+    return !invert //true by default
+  })
+}
+
+var nonUnique = exports.nonUnique = function (read, field) {
+  return unique(read, field, true)
+}
+
+var group = exports.group =
+function (read, size) {
+  var ended; size = size || 5
+  var queue = []
+
+  return function (end, cb) {
+    //this means that the upstream is sending an error.
+    if(end) return read(ended = end, cb)
+    //this means that we read an end before.
+    if(ended) return cb(ended)
+
+    read(null, function next(end, data) {
+      if(ended = ended || end) {
+        if(!queue.length)
+          return cb(ended)
+
+        var _queue = queue; queue = []
+        return cb(null, _queue)
+      }
+      queue.push(data)
+      if(queue.length < size)
+        return read(null, next)
+
+      var _queue = queue; queue = []
+      cb(null, _queue)
+    })
+  }
+}
+
+var flatten = exports.flatten = function (read) {
+  var _read
+  return function (abort, cb) {
+    if(_read) nextChunk()
+    else      nextStream()
+
+    function nextChunk () {
+      _read(null, function (end, data) {
+        if(end) nextStream()
+        else    cb(null, data)
+      })
+    }
+    function nextStream () {
+      read(null, function (end, stream) {
+        if(end)
+          return cb(end)
+        if(Array.isArray(stream))
+          stream = sources.values(stream)
+        else if('function' != typeof stream)
+          throw new Error('expected stream of streams')
+        
+        _read = stream
+        nextChunk()
+      })
+    }
+  }
+}
+
+var prepend =
+exports.prepend =
+function (read, head) {
+
+  return function (abort, cb) {
+    if(head !== null) {
+      if(abort)
+        return read(abort, cb)
+      var _head = head
+      head = null
+      cb(null, _head)
+    } else {
+      read(abort, cb)
+    }
+  }
+
+}
+
+//var drainIf = exports.drainIf = function (op, done) {
+//  sinks.drain(
+//}
+
+var _reduce = exports._reduce = function (read, reduce, initial) {
+  return function (close, cb) {
+    if(close) return read(close, cb)
+    if(ended) return cb(ended)
+
+    sinks.drain(function (item) {
+      initial = reduce(initial, item)
+    }, function (err, data) {
+      ended = err || true
+      if(!err) cb(null, initial)
+      else     cb(ended)
+    })
+    (read)
+  }
+}
+
+var nextTick = process.nextTick
+
+var highWaterMark = exports.highWaterMark = 
+function (read, highWaterMark) {
+  var buffer = [], waiting = [], ended, reading = false
+  highWaterMark = highWaterMark || 10
+
+  function readAhead () {
+    while(waiting.length && (buffer.length || ended))
+      waiting.shift()(ended, ended ? null : buffer.shift())
+  }
+
+  function next () {
+    if(ended || reading || buffer.length >= highWaterMark)
+      return
+    reading = true
+    return read(ended, function (end, data) {
+      reading = false
+      ended = ended || end
+      if(data != null) buffer.push(data)
+      
+      next(); readAhead()
+    })
+  }
+
+  nextTick(next)
+
+  return function (end, cb) {
+    ended = ended || end
+    waiting.push(cb)
+
+    next(); readAhead()
+  }
+}
+
+
+
+
+}).call(this,require('_process'))
+},{"./sinks":36,"./sources":37,"_process":4,"pull-core":35}],39:[function(require,module,exports){
+var sources  = require('./sources')
+var sinks    = require('./sinks')
+var throughs = require('./throughs')
+var u        = require('pull-core')
+
+function isFunction (fun) {
+  return 'function' === typeof fun
+}
+
+function isReader (fun) {
+  return fun && (fun.type === "Through" || fun.length === 1)
+}
+var exports = module.exports = function pull () {
+  var args = [].slice.call(arguments)
+
+  if(isReader(args[0]))
+    return function (read) {
+      args.unshift(read)
+      return pull.apply(null, args)
+    }
+
+  var read = args.shift()
+
+  //if the first function is a duplex stream,
+  //pipe from the source.
+  if(isFunction(read.source))
+    read = read.source
+
+  function next () {
+    var s = args.shift()
+
+    if(null == s)
+      return next()
+
+    if(isFunction(s)) return s
+
+    return function (read) {
+      s.sink(read)
+      //this supports pipeing through a duplex stream
+      //pull(a, b, a) "telephone style".
+      //if this stream is in the a (first & last position)
+      //s.source will have already been used, but this should never be called
+      //so that is okay.
+      return s.source
+    }
+  }
+
+  while(args.length)
+    read = next() (read)
+
+  return read
+}
+
+
+for(var k in sources)
+  exports[k] = u.Source(sources[k])
+
+for(var k in throughs)
+  exports[k] = u.Through(throughs[k])
+
+for(var k in sinks)
+  exports[k] = u.Sink(sinks[k])
+
+var maybe = require('./maybe')(exports)
+
+for(var k in maybe)
+  exports[k] = maybe[k]
+
+exports.Duplex  = 
+exports.Through = exports.pipeable       = u.Through
+exports.Source  = exports.pipeableSource = u.Source
+exports.Sink    = exports.pipeableSink   = u.Sink
+
+
+
+},{"./maybe":40,"./sinks":42,"./sources":43,"./throughs":44,"pull-core":41}],40:[function(require,module,exports){
+var u = require('pull-core')
+var prop = u.prop
+var id   = u.id
+var maybeSink = u.maybeSink
+
+module.exports = function (pull) {
+
+  var exports = {}
+  var drain = pull.drain
+
+  var find =
+  exports.find = function (test, cb) {
+    return maybeSink(function (cb) {
+      var ended = false
+      if(!cb)
+        cb = test, test = id
+      else
+        test = prop(test) || id
+
+      return drain(function (data) {
+        if(test(data)) {
+          ended = true
+          cb(null, data)
+        return false
+        }
+      }, function (err) {
+        if(ended) return //already called back
+        cb(err === true ? null : err, null)
+      })
+
+    }, cb)
+  }
+
+  var reduce = exports.reduce =
+  function (reduce, acc, cb) {
+
+    return maybeSink(function (cb) {
+      return drain(function (data) {
+        acc = reduce(acc, data)
+      }, function (err) {
+        cb(err, acc)
+      })
+
+    }, cb)
+  }
+
+  var collect = exports.collect = exports.writeArray =
+  function (cb) {
+    return reduce(function (arr, item) {
+      arr.push(item)
+      return arr
+    }, [], cb)
+  }
+
+  var concat = exports.concat =
+  function (cb) {
+    return reduce(function (a, b) {
+      return a + b
+    }, '', cb)
+  }
+
+  return exports
+}
+
+},{"pull-core":41}],41:[function(require,module,exports){
+module.exports=require(35)
+},{"/home/doehlman/code/rtc.io/rtc/node_modules/rtc-quickconnect/node_modules/rtc-signaller/node_modules/pull-pushable/node_modules/pull-stream/node_modules/pull-core/index.js":35}],42:[function(require,module,exports){
+var drain = exports.drain = function (read, op, done) {
+
+  ;(function next() {
+    var loop = true, cbed = false
+    while(loop) {
+      cbed = false
+      read(null, function (end, data) {
+        cbed = true
+        if(end) {
+          loop = false
+          if(done) done(end === true ? null : end)
+          else if(end && end !== true)
+            throw end
+        }
+        else if(op && false === op(data)) {
+          loop = false
+          read(true, done || function () {})
+        }
+        else if(!loop){
+          next()
+        }
+      })
+      if(!cbed) {
+        loop = false
+        return
+      }
+    }
+  })()
+}
+
+var onEnd = exports.onEnd = function (read, done) {
+  return drain(read, null, done)
+}
+
+var log = exports.log = function (read, done) {
+  return drain(read, function (data) {
+    console.log(data)
+  }, done)
+}
+
+
+},{}],43:[function(require,module,exports){
+
+var keys = exports.keys =
+function (object) {
+  return values(Object.keys(object))
+}
+
+var once = exports.once =
+function (value) {
+  return function (abort, cb) {
+    if(abort) return cb(abort)
+    if(value != null) {
+      var _value = value; value = null
+      cb(null, _value)
+    } else
+      cb(true)
+  }
+}
+
+var values = exports.values = exports.readArray =
+function (array) {
+  if(!Array.isArray(array))
+    array = Object.keys(array).map(function (k) {
+      return array[k]
+    })
+  var i = 0
+  return function (end, cb) {
+    if(end)
+      return cb && cb(end)
+    cb(i >= array.length || null, array[i++])
+  }
+}
+
+
+var count = exports.count =
+function (max) {
+  var i = 0; max = max || Infinity
+  return function (end, cb) {
+    if(end) return cb && cb(end)
+    if(i > max)
+      return cb(true)
+    cb(null, i++)
+  }
+}
+
+var infinite = exports.infinite =
+function (generate) {
+  generate = generate || Math.random
+  return function (end, cb) {
+    if(end) return cb && cb(end)
+    return cb(null, generate())
+  }
+}
+
+var defer = exports.defer = function () {
+  var _read, cbs = [], _end
+
+  var read = function (end, cb) {
+    if(!_read) {
+      _end = end
+      cbs.push(cb)
+    } 
+    else _read(end, cb)
+  }
+  read.resolve = function (read) {
+    if(_read) throw new Error('already resolved')
+    _read = read
+    if(!_read) throw new Error('no read cannot resolve!' + _read)
+    while(cbs.length)
+      _read(_end, cbs.shift())
+  }
+  read.abort = function(err) {
+    read.resolve(function (_, cb) {
+      cb(err || true)
+    })
+  }
+  return read
+}
+
+var empty = exports.empty = function () {
+  return function (abort, cb) {
+    cb(true)
+  }
+}
+
+var error = exports.error = function (err) {
+  return function (abort, cb) {
+    cb(err)
+  }
+}
+
+var depthFirst = exports.depthFirst =
+function (start, createStream) {
+  var reads = []
+
+  reads.unshift(once(start))
+
+  return function next (end, cb) {
+    if(!reads.length)
+      return cb(true)
+    reads[0](end, function (end, data) {
+      if(end) {
+        //if this stream has ended, go to the next queue
+        reads.shift()
+        return next(null, cb)
+      }
+      reads.unshift(createStream(data))
+      cb(end, data)
+    })
+  }
+}
+//width first is just like depth first,
+//but push each new stream onto the end of the queue
+var widthFirst = exports.widthFirst =
+function (start, createStream) {
+  var reads = []
+
+  reads.push(once(start))
+
+  return function next (end, cb) {
+    if(!reads.length)
+      return cb(true)
+    reads[0](end, function (end, data) {
+      if(end) {
+        reads.shift()
+        return next(null, cb)
+      }
+      reads.push(createStream(data))
+      cb(end, data)
+    })
+  }
+}
+
+//this came out different to the first (strm)
+//attempt at leafFirst, but it's still a valid
+//topological sort.
+var leafFirst = exports.leafFirst =
+function (start, createStream) {
+  var reads = []
+  var output = []
+  reads.push(once(start))
+
+  return function next (end, cb) {
+    reads[0](end, function (end, data) {
+      if(end) {
+        reads.shift()
+        if(!output.length)
+          return cb(true)
+        return cb(null, output.shift())
+      }
+      reads.unshift(createStream(data))
+      output.unshift(data)
+      next(null, cb)
+    })
+  }
+}
+
+
+},{}],44:[function(require,module,exports){
+(function (process){
+var u      = require('pull-core')
+var sources = require('./sources')
+var sinks = require('./sinks')
+
+var prop   = u.prop
+var id     = u.id
+var tester = u.tester
+
+var map = exports.map =
+function (read, map) {
+  map = prop(map) || id
+  return function (abort, cb) {
+    read(abort, function (end, data) {
+      try {
+      data = !end ? map(data) : null
+      } catch (err) {
+        return read(err, function () {
+          return cb(err)
+        })
+      }
+      cb(end, data)
+    })
+  }
+}
+
+var asyncMap = exports.asyncMap =
+function (read, map) {
+  if(!map) return read
+  return function (end, cb) {
+    if(end) return read(end, cb) //abort
+    read(null, function (end, data) {
+      if(end) return cb(end, data)
+      map(data, cb)
+    })
+  }
+}
+
+var paraMap = exports.paraMap =
+function (read, map, width) {
+  if(!map) return read
+  var ended = false, queue = [], _cb
+
+  function drain () {
+    if(!_cb) return
+    var cb = _cb
+    _cb = null
+    if(queue.length)
+      return cb(null, queue.shift())
+    else if(ended && !n)
+      return cb(ended)
+    _cb = cb
+  }
+
+  function pull () {
+    read(null, function (end, data) {
+      if(end) {
+        ended = end
+        return drain()
+      }
+      n++
+      map(data, function (err, data) {
+        n--
+
+        queue.push(data)
+        drain()
+      })
+
+      if(n < width && !ended)
+        pull()
+    })
+  }
+
+  var n = 0
+  return function (end, cb) {
+    if(end) return read(end, cb) //abort
+    //continue to read while there are less than 3 maps in flight
+    _cb = cb
+    if(queue.length || ended)
+      pull(), drain()
+    else pull()
+  }
+  return highWaterMark(asyncMap(read, map), width)
+}
+
+var filter = exports.filter =
+function (read, test) {
+  //regexp
+  test = tester(test)
+  return function next (end, cb) {
+    var sync, loop = true
+    while(loop) {
+      loop = false
+      sync = true
+      read(end, function (end, data) {
+        if(!end && !test(data))
+          return sync ? loop = true : next(end, cb)
+        cb(end, data)
+      })
+      sync = false
+    }
+  }
+}
+
+var filterNot = exports.filterNot =
+function (read, test) {
+  test = tester(test)
+  return filter(read, function (e) {
+    return !test(e)
+  })
+}
+
+var through = exports.through =
+function (read, op, onEnd) {
+  var a = false
+  function once (abort) {
+    if(a || !onEnd) return
+    a = true
+    onEnd(abort === true ? null : abort)
+  }
+
+  return function (end, cb) {
+    if(end) once(end)
+    return read(end, function (end, data) {
+      if(!end) op && op(data)
+      else once(end)
+      cb(end, data)
+    })
+  }
+}
+
+var take = exports.take =
+function (read, test) {
+  var ended = false
+  if('number' === typeof test) {
+    var n = test; test = function () {
+      return n --
+    }
+  }
+
+  return function (end, cb) {
+    if(ended) return cb(ended)
+    if(ended = end) return read(ended, cb)
+
+    read(null, function (end, data) {
+      if(ended = ended || end) return cb(ended)
+      if(!test(data)) {
+        ended = true
+        read(true, function (end, data) {
+          cb(ended, data)
+        })
+      }
+      else
+        cb(null, data)
+    })
+  }
+}
+
+var unique = exports.unique = function (read, field, invert) {
+  field = prop(field) || id
+  var seen = {}
+  return filter(read, function (data) {
+    var key = field(data)
+    if(seen[key]) return !!invert //false, by default
+    else seen[key] = true
+    return !invert //true by default
+  })
+}
+
+var nonUnique = exports.nonUnique = function (read, field) {
+  return unique(read, field, true)
+}
+
+var group = exports.group =
+function (read, size) {
+  var ended; size = size || 5
+  var queue = []
+
+  return function (end, cb) {
+    //this means that the upstream is sending an error.
+    if(end) return read(ended = end, cb)
+    //this means that we read an end before.
+    if(ended) return cb(ended)
+
+    read(null, function next(end, data) {
+      if(ended = ended || end) {
+        if(!queue.length)
+          return cb(ended)
+
+        var _queue = queue; queue = []
+        return cb(null, _queue)
+      }
+      queue.push(data)
+      if(queue.length < size)
+        return read(null, next)
+
+      var _queue = queue; queue = []
+      cb(null, _queue)
+    })
+  }
+}
+
+var flatten = exports.flatten = function (read) {
+  var _read
+  return function (abort, cb) {
+    if(_read) nextChunk()
+    else      nextStream()
+
+    function nextChunk () {
+      _read(null, function (end, data) {
+        if(end) nextStream()
+        else    cb(null, data)
+      })
+    }
+    function nextStream () {
+      read(null, function (end, stream) {
+        if(end)
+          return cb(end)
+        if(Array.isArray(stream) || stream && 'object' === typeof stream)
+          stream = sources.values(stream)
+        else if('function' != typeof stream)
+          throw new Error('expected stream of streams')
+        _read = stream
+        nextChunk()
+      })
+    }
+  }
+}
+
+var prepend =
+exports.prepend =
+function (read, head) {
+
+  return function (abort, cb) {
+    if(head !== null) {
+      if(abort)
+        return read(abort, cb)
+      var _head = head
+      head = null
+      cb(null, _head)
+    } else {
+      read(abort, cb)
+    }
+  }
+
+}
+
+//var drainIf = exports.drainIf = function (op, done) {
+//  sinks.drain(
+//}
+
+var _reduce = exports._reduce = function (read, reduce, initial) {
+  return function (close, cb) {
+    if(close) return read(close, cb)
+    if(ended) return cb(ended)
+
+    sinks.drain(function (item) {
+      initial = reduce(initial, item)
+    }, function (err, data) {
+      ended = err || true
+      if(!err) cb(null, initial)
+      else     cb(ended)
+    })
+    (read)
+  }
+}
+
+var nextTick = process.nextTick
+
+var highWaterMark = exports.highWaterMark =
+function (read, highWaterMark) {
+  var buffer = [], waiting = [], ended, ending, reading = false
+  highWaterMark = highWaterMark || 10
+
+  function readAhead () {
+    while(waiting.length && (buffer.length || ended))
+      waiting.shift()(ended, ended ? null : buffer.shift())
+
+    if (!buffer.length && ending) ended = ending;
+  }
+
+  function next () {
+    if(ended || ending || reading || buffer.length >= highWaterMark)
+      return
+    reading = true
+    return read(ended || ending, function (end, data) {
+      reading = false
+      ending = ending || end
+      if(data != null) buffer.push(data)
+
+      next(); readAhead()
+    })
+  }
+
+  process.nextTick(next)
+
+  return function (end, cb) {
+    ended = ended || end
+    waiting.push(cb)
+
+    next(); readAhead()
+  }
+}
+
+var flatMap = exports.flatMap =
+function (read, mapper) {
+  mapper = mapper || id
+  var queue = [], ended
+
+  return function (abort, cb) {
+    if(queue.length) return cb(null, queue.shift())
+    else if(ended)   return cb(ended)
+
+    read(abort, function next (end, data) {
+      if(end) ended = end
+      else {
+        var add = mapper(data)
+        while(add && add.length)
+          queue.push(add.shift())
+      }
+
+      if(queue.length) cb(null, queue.shift())
+      else if(ended)   cb(ended)
+      else             read(null, next)
+    })
+  }
+}
+
+
+}).call(this,require('_process'))
+},{"./sinks":42,"./sources":43,"_process":4,"pull-core":41}],45:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
-/**
-  ## Modifiers
-
-**/
-
-/**
-  ### Length Modifier (len)
-
-  The length modifier is used to ensure that a string is exactly the length specified.  The string is sliced to the required max length, and then padded out with spaces (or a specified character) to meet the required length.
-
-  ```js
-  // pad the string test to 10 characters
-  formatter('{{ 0|len:10 }}')('test');   // 'test      '
-
-  // pad the string test to 10 characters, using a as the padding character
-  formatter('{{ 0|len:10:a }}')('test'); // 'testaaaaaa'
-  ```
-**/
-exports.len = function(length, padder) {
-  var testInt = parseInt(padder, 10);
-  var isNumber;
-
-  // default the padder to a space
-  padder = (! isNaN(testInt)) ? testInt : (padder || ' ');
-
-  // check whether we have a number for padding (we will pad left if we do)
-  isNumber = typeof padder == 'number';
-  
-  return function(input) {
-    var output = input.toString().slice(0, length);
-    
-    // pad the string to the required length
-    while (output.length < length) {
-      output = isNumber ? padder + output : output + padder;
-    }
-    
-    return output;
-  };
-};
-},{}],34:[function(require,module,exports){
-/* jshint node: true */
-/* global document, location, Primus: false */
-'use strict';
-
-var reTrailingSlash = /\/$/;
-var formatter = require('formatter');
-var primusUrl = formatter('{{ signalhost }}{{ primusPath }}');
-
-/**
-  ### loadPrimus(signalhost, opts?, callback)
-
-  This is a convenience function that is patched into the signaller to assist
-  with loading the `primus.js` client library from an `rtc-switchboard`
-  signaling server.
-
-  In the case that you wish to load `primus.js` from a location other than
-  the default location of `{{ signalhost }}/rtc.io/primus.js` you can
-  provide an options object which allows for the following customizations:
-
-  - `primusPath` (default: `/rtc.io/primus.js`)
-
-    The path at which the `primus.js` file can be found on the signalhost.
-
-   __NOTE:__ The above options are passed through when creating a
-   signaller object, and thus packages such as
-   [rtc-quickconnect](https://github.com/rtc-io/rtc-quickconnect)
-   will allow you to make the customisation with it's top level
-   options also.
-
-**/
-module.exports = function(signalhost, opts, callback) {
-  var anchor = document.createElement('a');
-  var script;
-  var scriptSrc;
-
-  if (typeof opts == 'function') {
-    callback = opts;
-    opts = {};
-  }
-
-  // initialise the anchor with the signalhost
-  anchor.href = signalhost;
-
-  // initialise the script location
-  scriptSrc = primusUrl({
-    signalhost: signalhost.replace(reTrailingSlash, ''),
-    primusPath: (opts || {}).primusPath || '/rtc.io/primus.js'
-  });
-
-  // look for the script first
-  script = document.querySelector('script[src="' + scriptSrc + '"]');
-
-  // if we found, the script trigger the callback immediately
-  if (script && typeof Primus != 'undefined') {
-    return callback(null, Primus);
-  }
-  // otherwise, if the script exists but Primus is not loaded,
-  // then wait for the load
-  else if (script) {
-    script.addEventListener('load', function() {
-      callback(null, Primus);
-    });
-
-    return;
-  }
-
-  // otherwise create the script and load primus
-  script = document.createElement('script');
-  script.src = scriptSrc;
-
-  script.onerror = callback;
-  script.addEventListener('load', function() {
-    // if we have a signalhost that is not basepathed at /
-    // then tweak the primus prototype
-    if (anchor.pathname !== '/') {
-      Primus.prototype.pathname = anchor.pathname.replace(reTrailingSlash, '') +
-        Primus.prototype.pathname;
-    }
-
-    callback(null, Primus);
-  });
-
-  document.body.appendChild(script);
-};
-
-},{"formatter":32}],35:[function(require,module,exports){
-/* jshint node: true */
-'use strict';
-
-var debug = require('cog/logger')('rtc-signaller');
 var jsonparse = require('cog/jsonparse');
 
 /**
@@ -3373,7 +4921,7 @@ module.exports = function(signaller, opts) {
 
   function sendEvent(parts, srcState, data) {
     // initialise the event name
-    var evtName = parts[0].slice(1);
+    var evtName = 'message:' + parts[0].slice(1);
 
     // convert any valid json objects to json
     var args = parts.slice(2).map(jsonparse);
@@ -3400,7 +4948,6 @@ module.exports = function(signaller, opts) {
 
     // force the id into string format so we can run length and comparison tests on it
     var id = signaller.id + '';
-    debug('signaller ' + id + ' received data: ' + originalData);
 
     // process /to messages
     if (data.slice(0, 3) === '/to') {
@@ -3422,6 +4969,7 @@ module.exports = function(signaller, opts) {
     }
 
     // chop the data into parts
+    signaller('rawdata', data);
     parts = parts || data.split('|').map(jsonparse);
 
     // if we have a specific handler for the action, then invoke
@@ -3470,520 +5018,483 @@ module.exports = function(signaller, opts) {
   };
 };
 
-},{"./handlers":29,"cog/jsonparse":8,"cog/logger":9}],36:[function(require,module,exports){
-/* jshint node: true */
-'use strict';
-
-var debug = require('cog/logger')('rtc-signaller');
-var detect = require('rtc-core/detect');
-var defaults = require('cog/defaults');
+},{"./handlers":29,"cog/jsonparse":8}],46:[function(require,module,exports){
 var extend = require('cog/extend');
-var mbus = require('mbus');
-var throttle = require('cog/throttle');
-var getable = require('cog/getable');
-var uuid = require('cuid');
-
-// initialise the list of valid "write" methods
-var WRITE_METHODS = ['write', 'send'];
-var CLOSE_METHODS = ['close', 'end'];
-
-// initialise signaller metadata so we don't have to include the package.json
-// TODO: make this checkable with some kind of prepublish script
-var metadata = {
-  version: '3.1.1'
-};
 
 /**
-  # rtc-signaller
+  # rtc-switchboard-messenger
 
-  The `rtc-signaller` module provides a transportless signalling
-  mechanism for WebRTC.
-
-  ## Purpose
-
-  <<< docs/purpose.md
-
-  ## Getting Started
-
-  While the signaller is capable of communicating by a number of different
-  messengers (i.e. anything that can send and receive messages over a wire)
-  it comes with support for understanding how to connect to an
-  [rtc-switchboard](https://github.com/rtc-io/rtc-switchboard) out of the box.
-
-  The following code sample demonstrates how:
-
-  <<< examples/getting-started.js
-
-  <<< docs/events.md
-
-  <<< docs/signalflow-diagrams.md
-
-  ## Reference
-
-  The `rtc-signaller` module is designed to be used primarily in a functional
-  way and when called it creates a new signaller that will enable
-  you to communicate with other peers via your messaging network.
-
-  ```js
-  // create a signaller from something that knows how to send messages
-  var signaller = require('rtc-signaller')(messenger);
-  ```
-
-  As demonstrated in the getting started guide, you can also pass through
-  a string value instead of a messenger instance if you simply want to
-  connect to an existing `rtc-switchboard` instance.
+  A specialised version of
+  [`messenger-ws`](https://github.com/DamonOehlman/messenger-ws) designed to
+  connect to [`rtc-switchboard`](http://github.com/rtc-io/rtc-switchboard)
+  instances.
 
 **/
-module.exports = function(messenger, opts) {
-  // get the autoreply setting
-  var autoreply = (opts || {}).autoreply;
-  var connect = (opts || {}).connect;
+module.exports = function(switchboard, opts) {
+  return require('messenger-ws')(switchboard, extend({
+    endpoints: ['/primus', '/']
+  }, opts));
+};
 
-  // initialise the metadata
-  var localMeta = {};
+},{"cog/extend":6,"messenger-ws":47}],47:[function(require,module,exports){
+var WebSocket = require('ws');
+var wsurl = require('wsurl');
+var ps = require('pull-ws');
+var defaults = require('cog/defaults');
+var reTrailingSlash = /\/$/;
 
-  // create the signaller
-  var signaller = mbus('', (opts || {}).logger);
+/**
+  # messenger-ws
 
-  // initialise the id
-  var id = signaller.id = (opts || {}).id || uuid();
+  This is a simple messaging implementation for sending and receiving data
+  via websockets.
 
-  // initialise the attributes
-  var attributes = signaller.attributes = {
-    browser: detect.browser,
-    browserVersion: detect.browserVersion,
-    id: id,
-    agent: 'signaller@' + metadata.version
-  };
+  Follows the [messenger-archetype](https://github.com/DamonOehlman/messenger-archetype)
 
-  // create the peers map
-  var peers = signaller.peers = getable({});
+  ## Example Usage
 
-  // initialise the data event name
+  <<< examples/simple.js
 
-  var connected = false;
-  var write;
-  var close;
-  var processor;
-  var announceTimer = 0;
+**/
+module.exports = function(url, opts) {
+  var timeout = (opts || {}).timeout || 1000;
+  var endpoints = ((opts || {}).endpoints || ['/']).map(function(endpoint) {
+    return url.replace(reTrailingSlash, '') + endpoint;
+  });
 
-  function announceOnReconnect() {
-    signaller.announce();
-  }
+  function connect(callback) {
+    var queue = [].concat(endpoints);
+    var receivedData = false;
+    var failTimer;
+    var successTimer;
 
-  function bindBrowserEvents() {
-    messenger.addEventListener('message', function(evt) {
-      processor(evt.data);
-    });
+    function attemptNext() {
+      var socket;
 
-    messenger.addEventListener('open', handleMessengerOpen);
-    messenger.addEventListener('close', handleMessengerClose);
-  }
-
-  function bindEvents() {
-    // handle message data events
-    messenger.on(opts.dataEvent, processor);
-    messenger.on(opts.openEvent, handleMessengerOpen);
-    messenger.on(opts.closeEvent, handleMessengerClose);
-    messenger.on(opts.errorEvent, handleMessengerClose);
-  }
-
-  function connectToHost(url) {
-    if (typeof connect != 'function') {
-      return signaller('error', new Error('no connect function'));
-    }
-
-    // load primus
-    connect(url, opts, function(err, socket) {
-      if (err) {
-        return signaller('error', err);
+      function registerMessage(evt) {
+        receivedData = true;
+        (socket.removeEventListener || socket.removeListener)('message', registerMessage);
       }
 
-      // create the actual messenger from a primus connection
-      signaller._messenger = messenger = socket.connect(url);
+      // if we have no more valid endpoints, then erorr out
+      if (queue.length === 0) {
+        return callback(new Error('Unable to connect to url: ' + url));
+      }
 
-      // now init
-      init();
-    });
-  }
+      socket = new WebSocket(wsurl(queue.shift()));
+      socket.addEventListener('error', handleError);
+      socket.addEventListener('close', handleAbnormalClose);
+      socket.addEventListener('open', function() {
+        // create the source immediately to buffer any data
+        var source = ps.source(socket, opts);
 
-  function createDataLine(args) {
-    return args.map(prepareArg).join('|');
-  }
+        // monitor data flowing from the socket
+        socket.addEventListener('message', registerMessage);
 
-  function createMetadata() {
-    return extend({}, localMeta, { id: signaller.id });
-  }
-
-  function extractProp(name) {
-    return messenger[name];
-  }
-
-  function handleMessengerClose(err) {
-    if (err instanceof Error) {
-      console.log('socket closed with error: ', err);
-    }
-
-    connected = false;
-    signaller('disconnected');
-  }
-
-  function handleMessengerOpen() {
-    connected = true;
-    signaller('open');
-    signaller('connected');
-  }
-
-  // attempt to detect whether the underlying messenger is closing
-  // this can be tough as we deal with both native (or simulated native)
-  // sockets or an abstraction layer such as primus
-  function isClosing() {
-    var isAbstraction = messenger &&
-        // a primus socket has a socket attribute
-        typeof messenger.socket != 'undefined';
-
-    return isAbstraction ? false : (
-      messenger &&
-      typeof messenger.readyState != 'undefined' &&
-      messenger.readyState >= 2
-    );
-  }
-
-  function isF(target) {
-    return typeof target == 'function';
-  }
-
-  function init() {
-    // extract the write and close function references
-    write = [opts.writeMethod].concat(WRITE_METHODS).map(extractProp).filter(isF)[0];
-    close = [opts.closeMethod].concat(CLOSE_METHODS).map(extractProp).filter(isF)[0];
-
-    // create the processor
-    signaller.process = processor = require('./processor')(signaller, opts);
-
-    // if the messenger doesn't provide a valid write method, then complain
-    if (typeof write != 'function') {
-      throw new Error('provided messenger does not implement a "' +
-        opts.writeMethod + '" write method');
-    }
-
-    // handle core browser messenging apis
-    if (typeof messenger.on == 'function') {
-      bindEvents();
-    }
-    else if (typeof messenger.addEventListener == 'function') {
-      bindBrowserEvents();
-    }
-
-    // determine if we are connected or not
-    connected = messenger.connected || false;
-    if (! connected) {
-      signaller.once('connected', function() {
-        // always announce on reconnect
-        signaller.on('connected', announceOnReconnect);
+        successTimer = setTimeout(function() {
+          clearTimeout(failTimer);
+          callback(null, source, ps.sink(socket, opts));
+        }, 100);
       });
+
+      failTimer = setTimeout(attemptNext, timeout);
     }
 
-    // emit the initialized event
-    setTimeout(signaller.bind(signaller, 'init'), 0);
-  }
-
-  function prepareArg(arg) {
-    if (typeof arg == 'object' && (! (arg instanceof String))) {
-      return JSON.stringify(arg);
-    }
-    else if (typeof arg == 'function') {
-      return null;
-    }
-
-    return arg;
-  }
-
-  /**
-    ### signaller#send(message, data*)
-
-    Use the send function to send a message to other peers in the current
-    signalling scope (if announced in a room this will be a room, otherwise
-    broadcast to all peers connected to the signalling server).
-
-  **/
-  var send = signaller.send = function() {
-    // iterate over the arguments and stringify as required
-    // var metadata = { id: signaller.id };
-    var args = [].slice.call(arguments);
-    var dataline;
-
-    // inject the metadata
-    args.splice(1, 0, createMetadata());
-    dataline = createDataLine(args);
-
-    // perform an isclosing check
-    if (isClosing()) {
-      return;
-    }
-
-    // if we are not initialized, then wait until we are
-    if (! connected) {
-      return signaller.once('connected', function() {
-        write.call(messenger, dataline);
-      });
-    }
-
-    // send the data over the messenger
-    return write.call(messenger, dataline);
-  };
-
-  /**
-    ### announce(data?)
-
-    The `announce` function of the signaller will pass an `/announce` message
-    through the messenger network.  When no additional data is supplied to
-    this function then only the id of the signaller is sent to all active
-    members of the messenging network.
-
-    #### Joining Rooms
-
-    To join a room using an announce call you simply provide the name of the
-    room you wish to join as part of the data block that you annouce, for
-    example:
-
-    ```js
-    signaller.announce({ room: 'testroom' });
-    ```
-
-    Signalling servers (such as
-    [rtc-switchboard](https://github.com/rtc-io/rtc-switchboard)) will then
-    place your peer connection into a room with other peers that have also
-    announced in this room.
-
-    Once you have joined a room, the server will only deliver messages that
-    you `send` to other peers within that room.
-
-    #### Providing Additional Announce Data
-
-    There may be instances where you wish to send additional data as part of
-    your announce message in your application.  For instance, maybe you want
-    to send an alias or nick as part of your announce message rather than just
-    use the signaller's generated id.
-
-    If for instance you were writing a simple chat application you could join
-    the `webrtc` room and tell everyone your name with the following announce
-    call:
-
-    ```js
-    signaller.announce({
-      room: 'webrtc',
-      nick: 'Damon'
-    });
-    ```
-
-    #### Announcing Updates
-
-    The signaller is written to distinguish between initial peer announcements
-    and peer data updates (see the docs on the announce handler below). As
-    such it is ok to provide any data updates using the announce method also.
-
-    For instance, I could send a status update as an announce message to flag
-    that I am going offline:
-
-    ```js
-    signaller.announce({ status: 'offline' });
-    ```
-
-  **/
-  signaller.announce = function(data, sender) {
-
-    function sendAnnounce() {
-      (sender || send)('/announce', attributes);
-      signaller('local:announce', attributes);
-    }
-
-    clearTimeout(announceTimer);
-
-    // update internal attributes
-    extend(attributes, data, { id: signaller.id });
-
-    // if we are already connected, then ensure we announce on
-    // reconnect
-    if (connected) {
-      // always announce on reconnect
-      signaller.removeListener('connected', announceOnReconnect);
-      signaller.on('connected', announceOnReconnect);
-    }
-
-    // send the attributes over the network
-    return announceTimer = setTimeout(function() {
-      if (! connected) {
-        return signaller.once('connected', sendAnnounce);
-      }
-
-      sendAnnounce();
-    }, (opts || {}).announceDelay || 10);
-  };
-
-  /**
-    ### isMaster(targetId)
-
-    A simple function that indicates whether the local signaller is the master
-    for it's relationship with peer signaller indicated by `targetId`.  Roles
-    are determined at the point at which signalling peers discover each other,
-    and are simply worked out by whichever peer has the lowest signaller id
-    when lexigraphically sorted.
-
-    For example, if we have two signaller peers that have discovered each
-    others with the following ids:
-
-    - `b11f4fd0-feb5-447c-80c8-c51d8c3cced2`
-    - `8a07f82e-49a5-4b9b-a02e-43d911382be6`
-
-    They would be assigned roles:
-
-    - `b11f4fd0-feb5-447c-80c8-c51d8c3cced2`
-    - `8a07f82e-49a5-4b9b-a02e-43d911382be6` (master)
-
-  **/
-  signaller.isMaster = function(targetId) {
-    var peer = peers.get(targetId);
-
-    return peer && peer.roleIdx !== 0;
-  };
-
-  /**
-    ### leave()
-
-    Tell the signalling server we are leaving.  Calling this function is
-    usually not required though as the signalling server should issue correct
-    `/leave` messages when it detects a disconnect event.
-
-  **/
-  signaller.leave = signaller.close = function() {
-    // send the leave signal
-    send('/leave', { id: id });
-
-    // stop announcing on reconnect
-    signaller.removeListener('connected', announceOnReconnect);
-
-    // call the close method
-    if (typeof close == 'function') {
-      close.call(messenger);
-    }
-  };
-
-  /**
-    ### metadata(data?)
-
-    Get (pass no data) or set the metadata that is passed through with each
-    request sent by the signaller.
-
-    __NOTE:__ Regardless of what is passed to this function, metadata
-    generated by the signaller will **always** include the id of the signaller
-    and this cannot be modified.
-  **/
-  signaller.metadata = function(data) {
-    if (arguments.length === 0) {
-      return extend({}, localMeta);
-    }
-
-    localMeta = extend({}, data);
-  };
-
-  /**
-    ### to(targetId)
-
-    Use the `to` function to send a message to the specified target peer.
-    A large parge of negotiating a WebRTC peer connection involves direct
-    communication between two parties which must be done by the signalling
-    server.  The `to` function provides a simple way to provide a logical
-    communication channel between the two parties:
-
-    ```js
-    var send = signaller.to('e95fa05b-9062-45c6-bfa2-5055bf6625f4').send;
-
-    // create an offer on a local peer connection
-    pc.createOffer(
-      function(desc) {
-        // set the local description using the offer sdp
-        // if this occurs successfully send this to our peer
-        pc.setLocalDescription(
-          desc,
-          function() {
-            send('/sdp', desc);
-          },
-          handleFail
-        );
-      },
-      handleFail
-    );
-    ```
-
-  **/
-  signaller.to = function(targetId) {
-    // create a sender that will prepend messages with /to|targetId|
-    var sender = function() {
-      // get the peer (yes when send is called to make sure it hasn't left)
-      var peer = signaller.peers.get(targetId);
-      var args;
-
-      if (! peer) {
-        throw new Error('Unknown peer: ' + targetId);
-      }
-
-      // if the peer is inactive, then abort
-      if (peer.inactive) {
+    function handleAbnormalClose(evt) {
+      // if this was a clean close do nothing
+      if (evt.wasClean && receivedData && queue.length === 0) {
         return;
       }
 
-      args = [
-        '/to',
-        targetId
-      ].concat([].slice.call(arguments));
-
-      // inject metadata
-      args.splice(3, 0, createMetadata());
-
-      setTimeout(function() {
-        var msg = createDataLine(args);
-        debug('TX (' + targetId + '): ' + msg);
-
-        write.call(messenger, msg);
-      }, 0);
-    };
-
-    return {
-      announce: function(data) {
-        return signaller.announce(data, sender);
-      },
-
-      send: sender,
+      return handleError();
     }
-  };
 
-  // initialise opts defaults
-  opts = defaults({}, opts, require('./defaults'));
+    function handleError() {
+      clearTimeout(successTimer);
+      clearTimeout(failTimer);
+      attemptNext();
+    }
 
-  // set the autoreply flag
-  signaller.autoreply = autoreply === undefined || autoreply;
-
-  // if the messenger is a string, then we are going to attach to a
-  // ws endpoint and automatically set up primus
-  if (typeof messenger == 'string' || (messenger instanceof String)) {
-    connectToHost(messenger);
-  }
-  // otherwise, initialise the connection
-  else {
-    init();
+    attemptNext();
   }
 
-  // connect an instance of the messenger to the signaller
-  signaller._messenger = messenger;
-
-  // expose the process as a process function
-  signaller.process = processor;
-
-  return signaller;
+  return connect;
 };
 
-},{"./defaults":27,"./processor":35,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cog/logger":9,"cog/throttle":10,"cuid":31,"mbus":23,"rtc-core/detect":18}],37:[function(require,module,exports){
+},{"cog/defaults":5,"pull-ws":48,"ws":53,"wsurl":54}],48:[function(require,module,exports){
+exports = module.exports = duplex;
+
+exports.source = require('./source');
+exports.sink = require('./sink');
+
+function duplex (ws, opts) {
+  return {
+    source: exports.source(ws),
+    sink: exports.sink(ws, opts)
+  };
+};
+
+},{"./sink":51,"./source":52}],49:[function(require,module,exports){
+exports.id = 
+function (item) {
+  return item
+}
+
+exports.prop = 
+function (map) {  
+  if('string' == typeof map) {
+    var key = map
+    return function (data) { return data[key] }
+  }
+  return map
+}
+
+exports.tester = function (test) {
+  if(!test) return exports.id
+  if('object' === typeof test
+    && 'function' === typeof test.test)
+      return test.test.bind(test)
+  return exports.prop(test) || exports.id
+}
+
+exports.addPipe = addPipe
+
+function addPipe(read) {
+  if('function' !== typeof read)
+    return read
+
+  read.pipe = read.pipe || function (reader) {
+    if('function' != typeof reader && 'function' != typeof reader.sink)
+      throw new Error('must pipe to reader')
+    var pipe = addPipe(reader.sink ? reader.sink(read) : reader(read))
+    return reader.source || pipe;
+  }
+  
+  read.type = 'Source'
+  return read
+}
+
+var Source =
+exports.Source =
+function Source (createRead) {
+  function s() {
+    var args = [].slice.call(arguments)
+    return addPipe(createRead.apply(null, args))
+  }
+  s.type = 'Source'
+  return s
+}
+
+
+var Through =
+exports.Through = 
+function (createRead) {
+  return function () {
+    var args = [].slice.call(arguments)
+    var piped = []
+    function reader (read) {
+      args.unshift(read)
+      read = createRead.apply(null, args)
+      while(piped.length)
+        read = piped.shift()(read)
+      return read
+      //pipeing to from this reader should compose...
+    }
+    reader.pipe = function (read) {
+      piped.push(read) 
+      if(read.type === 'Source')
+        throw new Error('cannot pipe ' + reader.type + ' to Source')
+      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
+      return reader
+    }
+    reader.type = 'Through'
+    return reader
+  }
+}
+
+var Sink =
+exports.Sink = 
+function Sink(createReader) {
+  return function () {
+    var args = [].slice.call(arguments)
+    if(!createReader)
+      throw new Error('must be createReader function')
+    function s (read) {
+      args.unshift(read)
+      return createReader.apply(null, args)
+    }
+    s.type = 'Sink'
+    return s
+  }
+}
+
+
+exports.maybeSink = 
+exports.maybeDrain = 
+function (createSink, cb) {
+  if(!cb)
+    return Through(function (read) {
+      var ended
+      return function (close, cb) {
+        if(close) return read(close, cb)
+        if(ended) return cb(ended)
+
+        createSink(function (err, data) {
+          ended = err || true
+          if(!err) cb(null, data)
+          else     cb(ended)
+        }) (read)
+      }
+    })()
+
+  return Sink(function (read) {
+    return createSink(cb) (read)
+  })()
+}
+
+
+},{}],50:[function(require,module,exports){
+module.exports = function(socket, callback) {
+  var remove = socket && (socket.removeEventListener || socket.removeListener);
+
+  function cleanup () {
+    if (typeof remove == 'function') {
+      remove.call(socket, 'open', handleOpen);
+      remove.call(socket, 'error', handleErr);
+    }
+  }
+
+  function handleOpen(evt) {
+    cleanup(); callback();
+  }
+
+  function handleErr (evt) {
+    cleanup(); callback(evt);
+  }
+
+  // if the socket is closing or closed, return end
+  if (socket.readyState >= 2) {
+    return callback(true);
+  }
+
+  // if open, trigger the callback
+  if (socket.readyState === 1) {
+    return callback();
+  }
+
+  socket.addEventListener('open', handleOpen);
+  socket.addEventListener('error', handleErr);
+};
+
+},{}],51:[function(require,module,exports){
+(function (process){
+var pull = require('pull-core');
+var ready = require('./ready');
+
+/**
+  ### `sink(socket, opts?)`
+
+  Create a pull-stream `Sink` that will write data to the `socket`.
+
+  <<< examples/write.js
+
+**/
+module.exports = pull.Sink(function(read, socket, opts) {
+  opts = opts || {}
+  var closeOnEnd = opts.closeOnEnd !== false;
+  var onClose = 'function' === typeof opts ? opts : opts.onClose;
+
+  function next(end, data) {
+    // if the stream has ended, simply return
+    if (end) {
+      if (closeOnEnd && socket.readyState <= 1) {
+        if(onClose)
+          socket.addEventListener('close', function (ev) {
+            if(ev.wasClean) onClose()
+            else {
+              var err = new Error('ws error')
+              err.event = ev
+              onClose(err)
+            }
+          });
+
+        socket.close();
+      }
+
+      return;
+    }
+
+    // socket ready?
+    ready(socket, function(end) {
+      if (end) {
+        return read(end, function () {});
+      }
+
+      socket.send(data);
+      process.nextTick(function() {
+        read(null, next);
+      });
+    });
+  }
+
+  read(null, next);
+});
+
+}).call(this,require('_process'))
+},{"./ready":50,"_process":4,"pull-core":49}],52:[function(require,module,exports){
+var pull = require('pull-core');
+var ready = require('./ready');
+
+/**
+  ### `source(socket)`
+
+  Create a pull-stream `Source` that will read data from the `socket`.
+
+  <<< examples/read.js
+
+**/
+module.exports = pull.Source(function(socket) {
+  var buffer = [];
+  var receiver;
+  var ended;
+
+  socket.addEventListener('message', function(evt) {
+    if (receiver) {
+      return receiver(null, evt.data);
+    }
+
+    buffer.push(evt.data);
+  });
+
+  socket.addEventListener('close', function(evt) {
+    if (ended) return;
+    if (receiver) {
+      return receiver(ended = true);
+    }
+  });
+
+  socket.addEventListener('error', function (evt) {
+    if (ended) return;
+    ended = evt;
+    if (receiver) {
+      receiver(ended);
+    }
+  });
+
+  function read(abort, cb) {
+    receiver = null;
+
+    //if stream has already ended.
+    if (ended)
+      return cb(ended)
+
+    // if ended, abort
+    if (abort) {
+      //this will callback when socket closes
+      receiver = cb
+      return socket.close()
+    }
+
+    ready(socket, function(end) {
+      if (end) {
+        return cb(ended = end);
+      }
+
+      // read from the socket
+      if (ended && ended !== true) {
+        return cb(ended);
+      }
+      else if (buffer.length > 0) {
+        return cb(null, buffer.shift());
+      }
+      else if (ended) {
+        return cb(true);
+      }
+
+      receiver = cb;
+    });
+  };
+
+  return read;
+});
+
+},{"./ready":50,"pull-core":49}],53:[function(require,module,exports){
+
+/**
+ * Module dependencies.
+ */
+
+var global = (function() { return this; })();
+
+/**
+ * WebSocket constructor.
+ */
+
+var WebSocket = global.WebSocket || global.MozWebSocket;
+
+/**
+ * Module exports.
+ */
+
+module.exports = WebSocket ? ws : null;
+
+/**
+ * WebSocket constructor.
+ *
+ * The third `opts` options object gets ignored in web browsers, since it's
+ * non-standard, and throws a TypeError if passed to the constructor.
+ * See: https://github.com/einaros/ws/issues/227
+ *
+ * @param {String} uri
+ * @param {Array} protocols (optional)
+ * @param {Object) opts (optional)
+ * @api public
+ */
+
+function ws(uri, protocols, opts) {
+  var instance;
+  if (protocols) {
+    instance = new WebSocket(uri, protocols);
+  } else {
+    instance = new WebSocket(uri);
+  }
+  return instance;
+}
+
+if (WebSocket) ws.prototype = WebSocket.prototype;
+
+},{}],54:[function(require,module,exports){
+var reHttpUrl = /^http(.*)$/;
+
+/**
+  # wsurl
+
+  Given a url (including protocol relative urls - i.e. `//`), generate an appropriate
+  url for a WebSocket endpoint (`ws` or `wss`).
+
+  ## Example Usage
+
+  <<< examples/relative.js
+
+**/
+
+module.exports = function(url, opts) {
+  var current = (opts || {}).current || (typeof location != 'undefined' && location.href);
+  var currentProtocol = current && current.slice(0, current.indexOf(':'));
+  var insecure = (opts || {}).insecure;
+  var isRelative = url.slice(0, 2) == '//';
+  var forceWS = (! currentProtocol) || currentProtocol === 'file:';
+
+  if (isRelative) {
+    return forceWS ?
+      ((insecure ? 'ws:' : 'wss:') + url) :
+      (currentProtocol.replace(reHttpUrl, 'ws$1') + ':' + url);
+  }
+
+  return url.replace(reHttpUrl, 'ws$1');
+};
+
+},{}],55:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4046,7 +5557,7 @@ module.exports = function(pc) {
   }, 100);
 };
 
-},{"cog/logger":9}],38:[function(require,module,exports){
+},{"cog/logger":9}],56:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4056,6 +5567,7 @@ var cleanup = require('./cleanup');
 var monitor = require('./monitor');
 var throttle = require('cog/throttle');
 var CLOSED_STATES = [ 'closed', 'failed' ];
+var CHECKING_STATES = [ 'checking' ];
 
 /**
   ### rtc-tools/couple
@@ -4139,6 +5651,11 @@ function couple(pc, targetId, signaller, opts) {
     signaller.removeListener('sdp', handleSdp);
     signaller.removeListener('candidate', handleCandidate);
     signaller.removeListener('negotiate', handleNegotiateRequest);
+
+    // remove listeners (version >= 5)
+    signaller.removeListener('message:sdp', handleSdp);
+    signaller.removeListener('message:candidate', handleCandidate);
+    signaller.removeListener('message:negotiate', handleNegotiateRequest);
   }
 
   function handleCandidate(data) {
@@ -4167,7 +5684,7 @@ function couple(pc, targetId, signaller, opts) {
     // start the disconnect timer
     disconnectTimer = setTimeout(function() {
       debug('manually closing connection after disconnect timeout');
-      pc.close();
+      cleanup(pc);
     }, disconnectTimeout);
 
     mon.on('statechange', handleDisconnectAbort);
@@ -4175,6 +5692,13 @@ function couple(pc, targetId, signaller, opts) {
 
   function handleDisconnectAbort() {
     debug('connection state changed to: ' + pc.iceConnectionState);
+
+    // if the state is checking, then do not reset the disconnect timer as
+    // we are doing our own checking
+    if (CHECKING_STATES.indexOf(pc.iceConnectionState) >= 0) {
+      return;
+    }
+
     resetDisconnectTimer();
 
     // if we have a closed or failed status, then close the connection
@@ -4244,9 +5768,14 @@ function couple(pc, targetId, signaller, opts) {
   signaller.on('sdp', handleSdp);
   signaller.on('candidate', handleCandidate);
 
+  // listeners (signaller >= 5)
+  signaller.on('message:sdp', handleSdp);
+  signaller.on('message:candidate', handleCandidate);
+
   // if this is a master connection, listen for negotiate events
   if (isMaster) {
     signaller.on('negotiate', handleNegotiateRequest);
+    signaller.on('message:negotiate', handleNegotiateRequest); // signaller >= 5
   }
 
   // when the connection closes, remove event handlers
@@ -4261,7 +5790,7 @@ function couple(pc, targetId, signaller, opts) {
 
 module.exports = couple;
 
-},{"./cleanup":37,"./monitor":42,"cog/logger":9,"cog/throttle":10,"mbus":23,"rtc-taskqueue":43}],39:[function(require,module,exports){
+},{"./cleanup":55,"./monitor":60,"cog/logger":9,"cog/throttle":10,"mbus":24,"rtc-taskqueue":61}],57:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4273,7 +5802,7 @@ module.exports = couple;
 **/
 module.exports = require('rtc-core/detect');
 
-},{"rtc-core/detect":18}],40:[function(require,module,exports){
+},{"rtc-core/detect":18}],58:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4362,7 +5891,7 @@ exports.connectionConstraints = function(flags, constraints) {
   return out;
 };
 
-},{"./detect":39,"cog/defaults":5,"cog/logger":9}],41:[function(require,module,exports){
+},{"./detect":57,"cog/defaults":5,"cog/logger":9}],59:[function(require,module,exports){
 /* jshint node: true */
 
 'use strict';
@@ -4380,10 +5909,10 @@ exports.connectionConstraints = function(flags, constraints) {
 
   If you decide that the `rtc-tools` module is a better fit for you than either
   [rtc-quickconnect](https://github.com/rtc-io/rtc-quickconnect) or
-  [rtc-glue](https://github.com/rtc-io/rtc-glue) then the code snippet below
+  [rtc](https://github.com/rtc-io/rtc) then the code snippet below
   will provide you a guide on how to get started using it in conjunction with
-  the [rtc-signaller](https://github.com/rtc-io/rtc-signaller) and
-  [rtc-media](https://github.com/rtc-io/rtc-media) modules:
+  the [rtc-signaller](https://github.com/rtc-io/rtc-signaller) (version 5.0 and above)
+  and [rtc-media](https://github.com/rtc-io/rtc-media) modules:
 
   <<< examples/getting-started.js
 
@@ -4453,7 +5982,7 @@ exports.createConnection = function(opts, constraints) {
   return new PeerConnection(config, constraints);
 };
 
-},{"./couple":38,"./detect":39,"./generators":40,"cog/logger":9,"rtc-core/plugin":21}],42:[function(require,module,exports){
+},{"./couple":56,"./detect":57,"./generators":58,"cog/logger":9,"rtc-core/plugin":21}],60:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -4512,17 +6041,6 @@ module.exports = function(pc, targetId, signaller, parentBus) {
     monitor('closed');
   }
 
-  function handlePeerLeave(peerId) {
-    // if the peer leaving is not the peer we are connected to
-    // then we aren't interested
-    if (peerId !== targetId) {
-      return;
-    }
-
-    // trigger a closed event
-    monitor('closed');
-  }
-
   pc.onclose = handleClose;
   peerStateEvents.forEach(function(evtName) {
     pc['on' + evtName] = checkState;
@@ -4533,11 +6051,6 @@ module.exports = function(pc, targetId, signaller, parentBus) {
     peerStateEvents.forEach(function(evtName) {
       pc['on' + evtName] = null;
     });
-
-    // remove the peer:leave listener
-    if (signaller && typeof signaller.removeListener == 'function') {
-      signaller.removeListener('peer:leave', handlePeerLeave);
-    }
   };
 
   monitor.checkState = checkState;
@@ -4550,11 +6063,6 @@ module.exports = function(pc, targetId, signaller, parentBus) {
   // determine the initial is active state
   state = getMappedState(pc.iceConnectionState);
 
-  // if we've been provided a signaller, then watch for peer:leave events
-  if (signaller && typeof signaller.on == 'function') {
-    signaller.on('peer:leave', handlePeerLeave);
-  }
-
   return monitor;
 };
 
@@ -4564,7 +6072,7 @@ function getMappedState(state) {
   return stateMappings[state] || state;
 }
 
-},{"mbus":23}],43:[function(require,module,exports){
+},{"mbus":24}],61:[function(require,module,exports){
 var detect = require('rtc-core/detect');
 var findPlugin = require('rtc-core/plugin');
 var PriorityQueue = require('priorityqueuejs');
@@ -4607,7 +6115,11 @@ var VALID_RESPONSE_STATES = ['have-remote-offer', 'have-local-pranswer'];
 
   ## Example Usage
 
-  To be completed
+  For the moment, refer to the simple coupling test as an example of how to use
+  this package (see below):
+
+  <<< test/couple.js
+
 **/
 module.exports = function(pc, opts) {
   // create the task queue
@@ -4640,25 +6152,25 @@ module.exports = function(pc, opts) {
   }
 
   function applyCandidate(task, next) {
-    var candidate;
     var data = task.args[0];
+    var candidate = data && data.candidate && createIceCandidate(data);
+
+    function handleOk() {
+      tq('ice.remote.applied', candidate);
+      next();
+    }
+
+    function handleFail(err) {
+      tq('ice.remote.invalid', candidate);
+      next(err);
+    }
 
     // we have a null candidate, we have finished gathering candidates
-    if (! data.candidate) {
+    if (! candidate) {
       return next();
     }
 
-    try {
-      candidate = createIceCandidate(data);
-      pc.addIceCandidate(candidate);
-      tq('ice.remote.applied', candidate);
-    }
-    catch (e) {
-      tq('ice.remote.invalid', candidate);
-      return next(e);
-    }
-
-    next();
+    pc.addIceCandidate(candidate, handleOk, handleFail);
   }
 
   function checkQueue() {
@@ -4907,7 +6419,7 @@ module.exports = function(pc, opts) {
   return tq;
 };
 
-},{"mbus":23,"priorityqueuejs":44,"rtc-core/detect":18,"rtc-core/plugin":21,"rtc-sdpclean":45,"rtc-validator/candidate":46}],44:[function(require,module,exports){
+},{"mbus":24,"priorityqueuejs":62,"rtc-core/detect":18,"rtc-core/plugin":21,"rtc-sdpclean":63,"rtc-validator/candidate":64}],62:[function(require,module,exports){
 /**
  * Expose `PriorityQueue`.
  */
@@ -5081,7 +6593,7 @@ PriorityQueue.prototype._swap = function(a, b) {
   this._elements[b] = aux;
 };
 
-},{}],45:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 var validators = [
   [ /^(a\=candidate.*)$/, require('rtc-validator/candidate') ]
 ];
@@ -5138,7 +6650,7 @@ function detectLineBreak(input) {
   return match && match[0];
 }
 
-},{"rtc-validator/candidate":46}],46:[function(require,module,exports){
+},{"rtc-validator/candidate":64}],64:[function(require,module,exports){
 var debug = require('cog/logger')('rtc-validator');
 var rePrefix = /^(?:a=)?candidate:/;
 var reIP = /^(\d+\.){3}\d+$/;
@@ -5225,7 +6737,7 @@ function validateParts(part, idx) {
   }
 }
 
-},{"cog/logger":9}],47:[function(require,module,exports){
+},{"cog/logger":9}],65:[function(require,module,exports){
 /**
   ## chain
 
