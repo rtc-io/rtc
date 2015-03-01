@@ -41,7 +41,7 @@ Establish a connection and render local and remote video feeds.
         <div id="l-video"></div>
     </div>
     <div class="pure-u-4-5" id="r-video"></div>
-<script src="https://cdn.rawgit.com/rtc-io/rtc/v3.0.0/dist/rtc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/rtc/latest/rtc.min.js"></script>
 </body>
 </html>
 ```
