@@ -1,4 +1,4 @@
-!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define([],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.RTC=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.RTC = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 // a default configuration that is used by the rtc package
 module.exports = {
   // simple constraints for defaults
@@ -436,69 +436,39 @@ function isUndefined(arg) {
 // shim for using process in browser
 
 var process = module.exports = {};
+var queue = [];
+var draining = false;
 
-process.nextTick = (function () {
-    var canSetImmediate = typeof window !== 'undefined'
-    && window.setImmediate;
-    var canMutationObserver = typeof window !== 'undefined'
-    && window.MutationObserver;
-    var canPost = typeof window !== 'undefined'
-    && window.postMessage && window.addEventListener
-    ;
-
-    if (canSetImmediate) {
-        return function (f) { return window.setImmediate(f) };
+function drainQueue() {
+    if (draining) {
+        return;
     }
-
-    var queue = [];
-
-    if (canMutationObserver) {
-        var hiddenDiv = document.createElement("div");
-        var observer = new MutationObserver(function () {
-            var queueList = queue.slice();
-            queue.length = 0;
-            queueList.forEach(function (fn) {
-                fn();
-            });
-        });
-
-        observer.observe(hiddenDiv, { attributes: true });
-
-        return function nextTick(fn) {
-            if (!queue.length) {
-                hiddenDiv.setAttribute('yes', 'no');
-            }
-            queue.push(fn);
-        };
+    draining = true;
+    var currentQueue;
+    var len = queue.length;
+    while(len) {
+        currentQueue = queue;
+        queue = [];
+        var i = -1;
+        while (++i < len) {
+            currentQueue[i]();
+        }
+        len = queue.length;
     }
-
-    if (canPost) {
-        window.addEventListener('message', function (ev) {
-            var source = ev.source;
-            if ((source === window || source === null) && ev.data === 'process-tick') {
-                ev.stopPropagation();
-                if (queue.length > 0) {
-                    var fn = queue.shift();
-                    fn();
-                }
-            }
-        }, true);
-
-        return function nextTick(fn) {
-            queue.push(fn);
-            window.postMessage('process-tick', '*');
-        };
+    draining = false;
+}
+process.nextTick = function (fun) {
+    queue.push(fun);
+    if (!draining) {
+        setTimeout(drainQueue, 0);
     }
-
-    return function nextTick(fn) {
-        setTimeout(fn, 0);
-    };
-})();
+};
 
 process.title = 'browser';
 process.browser = true;
 process.env = {};
 process.argv = [];
+process.version = ''; // empty string to avoid regexp issues
 
 function noop() {}
 
@@ -519,6 +489,7 @@ process.cwd = function () { return '/' };
 process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
 };
+process.umask = function() { return 0; };
 
 },{}],5:[function(require,module,exports){
 /* jshint node: true */
@@ -1570,7 +1541,7 @@ var browsers = [
   [ 'firefox', /Firefox\/([0-9\.]+)(?:\s|$)/ ],
   [ 'opera', /Opera\/([0-9\.]+)(?:\s|$)/ ],
   [ 'ie', /Trident\/7\.0.*rv\:([0-9\.]+)\).*Gecko$/ ],
-  [ 'ie', /MSIE\s([0-9\.]+);.*Trident\/[4-6].0/ ],
+  [ 'ie', /MSIE\s([0-9\.]+);.*Trident\/[4-7].0/ ],
   [ 'ie', /MSIE\s(7\.0)/ ],
   [ 'bb10', /BB10;\sTouch.*Version\/([0-9\.]+)/ ],
   [ 'android', /Android\s([0-9\.]+)/ ],
@@ -2133,7 +2104,7 @@ module.exports = function(signalhost, opts) {
   // if the room is not defined, then generate the room name
   if (! room) {
     // if the hash is not assigned, then create a random hash value
-    if (! hash) {
+    if (typeof location != 'undefined' && (! hash)) {
       hash = location.hash = '' + (Math.pow(2, 53) * Math.random());
     }
 
@@ -2224,7 +2195,7 @@ module.exports = function(signalhost, opts) {
     call:
 
     ```js
-    var qc = quickconnect('http://rtc.io/switchboard').createDataChannel('test');
+    var qc = quickconnect('https://switchboard.rtc.io/').createDataChannel('test');
     ```
 
     Then when the data channel is ready for use, a `test:open` event would
@@ -2486,7 +2457,8 @@ module.exports = function(signalhost, opts) {
 };
 
 }).call(this,require('_process'))
-},{"./messenger":23,"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":24,"rtc-core/genice":19,"rtc-core/plugin":21,"rtc-signaller":31,"rtc-tools":57,"rtc-tools/cleanup":53}],23:[function(require,module,exports){
+
+},{"./messenger":23,"_process":4,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"mbus":24,"rtc-core/genice":19,"rtc-core/plugin":21,"rtc-signaller":28,"rtc-tools":57,"rtc-tools/cleanup":53}],23:[function(require,module,exports){
 module.exports = function(messenger) {
   if (typeof messenger == 'function') {
     return messenger;
@@ -2495,8 +2467,7 @@ module.exports = function(messenger) {
   return require('rtc-switchboard-messenger')(messenger);
 };
 
-},{"rtc-switchboard-messenger":45}],24:[function(require,module,exports){
-var createTrie = require('array-trie');
+},{"rtc-switchboard-messenger":44}],24:[function(require,module,exports){
 var reDelim = /[\.\:]/;
 
 /**
@@ -2520,14 +2491,13 @@ var reDelim = /[\.\:]/;
 **/
 
 var createBus = module.exports = function(namespace, parent, scope) {
-  var registry = createTrie();
+  var registry = {};
   var feeds = [];
 
   function bus(name) {
     var args = [].slice.call(arguments, 1);
-    var parts = getNameParts(name);
-    var delimited = parts.join('.');
-    var handlers = registry.get(parts) || [];
+    var delimited = normalize(name);
+    var handlers = registry[delimited] || [];
     var results;
 
     // send through the feeds
@@ -2543,7 +2513,10 @@ var createBus = module.exports = function(namespace, parent, scope) {
     // run the parent handlers
     if (bus.parent) {
       results = results.concat(
-        bus.parent.apply(scope || this, [namespace.concat(parts)].concat(args))
+        bus.parent.apply(
+          scope || this,
+          [(namespace ? namespace + '.' : '') + delimited].concat(args)
+        )
       );
     }
 
@@ -2560,11 +2533,11 @@ var createBus = module.exports = function(namespace, parent, scope) {
   function clear(name) {
     // if we have a name, reset handlers for that handler
     if (name) {
-      registry.set(getNameParts(name), []);
+      delete registry[normalize(name)];
     }
     // otherwise, reset the entire handler registry
     else {
-      registry = createTrie();
+      registry = {};
     }
   }
 
@@ -2591,8 +2564,8 @@ var createBus = module.exports = function(namespace, parent, scope) {
     return stop;
   }
 
-  function getNameParts(name) {
-    return Array.isArray(name) ? name : (name ? name.split(reDelim) : []);
+  function normalize(name) {
+    return (Array.isArray(name) ? name : name.split(reDelim)).join('.');
   }
 
   /**
@@ -2601,8 +2574,8 @@ var createBus = module.exports = function(namespace, parent, scope) {
     Deregister an event handler.
   **/
   function off(name, handler) {
-    var handlers = registry.get(getNameParts(name));
-    var idx = handlers ? handlers.indexOf(handler) : -1;
+    var handlers = registry[normalize(name)] || [];
+    var idx = handlers ? handlers.indexOf(handler._actual || handler) : -1;
 
     if (idx >= 0) {
       handlers.splice(idx, 1);
@@ -2616,14 +2589,16 @@ var createBus = module.exports = function(namespace, parent, scope) {
 
   **/
   function on(name, handler) {
-    var parts = getNameParts(name);
-    var handlers = registry.get(parts);
+    var handlers;
+
+    name = normalize(name);
+    handlers = registry[name];
 
     if (handlers) {
       handlers.push(handler);
     }
     else {
-      registry.set(parts, [ handler ]);
+      registry[name] = [ handler ];
     }
 
     return bus;
@@ -2639,12 +2614,15 @@ var createBus = module.exports = function(namespace, parent, scope) {
 
   **/
   function once(name, handler) {
-    return on(name, function handleEvent() {
+    function handleEvent() {
       var result = handler.apply(this, arguments);
-      bus.off(name, handleEvent);
 
+      bus.off(name, handleEvent);
       return result;
-    });
+    }
+
+    handler._actual = handleEvent;
+    return on(name, handleEvent);
   }
 
   if (typeof namespace == 'function') {
@@ -2652,286 +2630,19 @@ var createBus = module.exports = function(namespace, parent, scope) {
     namespace = '';
   }
 
-  namespace = (namespace && namespace.split(reDelim)) || [];
+  namespace = normalize(namespace || '');
 
   bus.clear = bus.removeAllListeners = clear;
   bus.feed = feed;
   bus.on = bus.addListener = on;
   bus.once = once;
   bus.off = bus.removeListener = off;
-  bus.parent = parent || (namespace && namespace.length > 0 && createBus());
+  bus.parent = parent || (namespace && createBus());
 
   return bus;
 };
 
-},{"array-trie":26}],25:[function(require,module,exports){
-"use strict"
-
-function compileSearch(funcName, predicate, reversed, extraArgs, useNdarray, earlyOut) {
-  var code = [
-    "function ", funcName, "(a,l,h,", extraArgs.join(","),  "){",
-earlyOut ? "" : "var i=", (reversed ? "l-1" : "h+1"),
-";while(l<=h){\
-var m=(l+h)>>>1,x=a", useNdarray ? ".get(m)" : "[m]"]
-  if(earlyOut) {
-    if(predicate.indexOf("c") < 0) {
-      code.push(";if(x===y){return m}else if(x<=y){")
-    } else {
-      code.push(";var p=c(x,y);if(p===0){return m}else if(p<=0){")
-    }
-  } else {
-    code.push(";if(", predicate, "){i=m;")
-  }
-  if(reversed) {
-    code.push("l=m+1}else{h=m-1}")
-  } else {
-    code.push("h=m-1}else{l=m+1}")
-  }
-  code.push("}")
-  if(earlyOut) {
-    code.push("return -1};")
-  } else {
-    code.push("return i};")
-  }
-  return code.join("")
-}
-
-function compileBoundsSearch(predicate, reversed, suffix, earlyOut) {
-  var result = new Function([
-  compileSearch("A", "x" + predicate + "y", reversed, ["y"], false, earlyOut),
-  compileSearch("B", "x" + predicate + "y", reversed, ["y"], true, earlyOut),
-  compileSearch("P", "c(x,y)" + predicate + "0", reversed, ["y", "c"], false, earlyOut),
-  compileSearch("Q", "c(x,y)" + predicate + "0", reversed, ["y", "c"], true, earlyOut),
-"function dispatchBsearch", suffix, "(a,y,c,l,h){\
-if(a.shape){\
-if(typeof(c)==='function'){\
-return Q(a,(l===undefined)?0:l|0,(h===undefined)?a.shape[0]-1:h|0,y,c)\
-}else{\
-return B(a,(c===undefined)?0:c|0,(l===undefined)?a.shape[0]-1:l|0,y)\
-}}else{\
-if(typeof(c)==='function'){\
-return P(a,(l===undefined)?0:l|0,(h===undefined)?a.length-1:h|0,y,c)\
-}else{\
-return A(a,(c===undefined)?0:c|0,(l===undefined)?a.length-1:l|0,y)\
-}}}\
-return dispatchBsearch", suffix].join(""))
-  return result()
-}
-
-module.exports = {
-  ge: compileBoundsSearch(">=", false, "GE"),
-  gt: compileBoundsSearch(">", false, "GT"),
-  lt: compileBoundsSearch("<", true, "LT"),
-  le: compileBoundsSearch("<=", true, "LE"),
-  eq: compileBoundsSearch("-", true, "EQ", true)
-}
-
-},{}],26:[function(require,module,exports){
-"use strict"
-
-var bounds = require("binary-search-bounds")
-
-module.exports = createTrie
-
-function Trie(symbols, children, value) {
-  this.symbols = symbols
-  this.children = children
-  this.value = value
-}
-
-var proto = Trie.prototype
-
-proto.set = function(s, value) {
-  if(s.shape) {
-    var v = this
-    var n = s.shape[0]
-    for(var i=0; i<n; ++i) {
-      var c = s.get(i)
-      var j = bounds.ge(v.symbols, c)
-      if(j < v.symbols.length && v.symbols[j] === c) {
-        v = v.children[j]
-      } else {
-        var l = new Trie([], [], value)
-        for(var k=n-1; k>i; --k) {
-          l = new Trie([s.get(k)], [l])
-        }
-        v.symbols.splice(j, 0, c)
-        v.children.splice(j, 0, l)
-        return value
-      }
-    }
-    return v.value = value
-  } else {
-    var v = this
-    var n = s.length
-    for(var i=0; i<n; ++i) {
-      var c = s[i]
-      var j = bounds.ge(v.symbols, c)
-      if(j < v.symbols.length && v.symbols[j] === c) {
-        v = v.children[j]
-      } else {
-        var l = new Trie([], [], value)
-        for(var k=n-1; k>i; --k) {
-          l = new Trie([s[k]], [l])
-        }
-        v.symbols.splice(j, 0, c)
-        v.children.splice(j, 0, l)
-        return value
-      }
-    }
-    return v.value = value
-  }
-}
-
-proto.get = function(s) {
-  if(s.shape) {
-    var v = this
-    var n = s.shape[0]
-    for(var i=0; i<n; ++i) {
-      var c = s.get(i)
-      var j = bounds.eq(v.symbols, c)
-      if(j < 0) {
-        return
-      }
-      v = v.children[j]
-    }
-    return v.value
-  } else {
-    var v = this
-    var n = s.length
-    for(var i=0; i<n; ++i) {
-      var c = s[i]
-      var j = bounds.eq(v.symbols, c)
-      if(j < 0) {
-        return
-      }
-      v = v.children[j]
-    }
-    return v.value
-  }
-}
-
-function createTrie() {
-  return new Trie([],[])
-}
-},{"binary-search-bounds":25}],27:[function(require,module,exports){
-exports.id = 
-function (item) {
-  return item
-}
-
-exports.prop = 
-function (map) {  
-  if('string' == typeof map) {
-    var key = map
-    return function (data) { return data[key] }
-  }
-  return map
-}
-
-exports.tester = function (test) {
-  if(!test) return exports.id
-  if('object' === typeof test
-    && 'function' === typeof test.test)
-      return test.test.bind(test)
-  return exports.prop(test) || exports.id
-}
-
-exports.addPipe = addPipe
-
-function addPipe(read) {
-  if('function' !== typeof read)
-    return read
-
-  read.pipe = read.pipe || function (reader) {
-    if('function' != typeof reader)
-      throw new Error('must pipe to reader')
-    return addPipe(reader(read))
-  }
-  read.type = 'Source'
-  return read
-}
-
-var Source =
-exports.Source =
-function Source (createRead) {
-  function s() {
-    var args = [].slice.call(arguments)
-    return addPipe(createRead.apply(null, args))
-  }
-  s.type = 'Source'
-  return s
-}
-
-
-var Through =
-exports.Through = 
-function (createRead) {
-  return function () {
-    var args = [].slice.call(arguments)
-    var piped = []
-    function reader (read) {
-      args.unshift(read)
-      read = createRead.apply(null, args)
-      while(piped.length)
-        read = piped.shift()(read)
-      return read
-      //pipeing to from this reader should compose...
-    }
-    reader.pipe = function (read) {
-      piped.push(read) 
-      if(read.type === 'Source')
-        throw new Error('cannot pipe ' + reader.type + ' to Source')
-      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
-      return reader
-    }
-    reader.type = 'Through'
-    return reader
-  }
-}
-
-var Sink =
-exports.Sink = 
-function Sink(createReader) {
-  return function () {
-    var args = [].slice.call(arguments)
-    if(!createReader)
-      throw new Error('must be createReader function')
-    function s (read) {
-      args.unshift(read)
-      return createReader.apply(null, args)
-    }
-    s.type = 'Sink'
-    return s
-  }
-}
-
-
-exports.maybeSink = 
-exports.maybeDrain = 
-function (createSink, cb) {
-  if(!cb)
-    return Through(function (read) {
-      var ended
-      return function (close, cb) {
-        if(close) return read(close, cb)
-        if(ended) return cb(ended)
-
-        createSink(function (err, data) {
-          ended = err || true
-          if(!err) cb(null, data)
-          else     cb(ended)
-        }) (read)
-      }
-    })()
-
-  return Sink(function (read) {
-    return createSink(cb) (read)
-  })()
-}
-
-
-},{}],28:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 module.exports = {
   // messenger events
   dataEvent: 'data',
@@ -2947,7 +2658,7 @@ module.exports = {
   leaveTimeout: 3000
 };
 
-},{}],29:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3034,7 +2745,7 @@ module.exports = function(signaller) {
   };
 };
 
-},{"cog/extend":6}],30:[function(require,module,exports){
+},{"cog/extend":6}],27:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3049,7 +2760,7 @@ module.exports = function(signaller, opts) {
   };
 };
 
-},{"./announce":29}],31:[function(require,module,exports){
+},{"./announce":26}],28:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -3070,7 +2781,7 @@ var RS_CONNECTED = 2;
 // initialise signaller metadata so we don't have to include the package.json
 // TODO: make this checkable with some kind of prepublish script
 var metadata = {
-  version: '5.2.2'
+  version: '5.2.3'
 };
 
 /**
@@ -3486,7 +3197,7 @@ module.exports = function(messenger, opts) {
   return signaller;
 };
 
-},{"./defaults":28,"./processor":44,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cuid":32,"mbus":24,"pull-pushable":33,"pull-stream":39,"rtc-core/detect":18}],32:[function(require,module,exports){
+},{"./defaults":25,"./processor":43,"cog/defaults":5,"cog/extend":6,"cog/getable":7,"cuid":29,"mbus":24,"pull-pushable":30,"pull-stream":37,"rtc-core/detect":18}],29:[function(require,module,exports){
 /**
  * cuid.js
  * Collision-resistant UID generator for browsers and node.
@@ -3598,7 +3309,7 @@ module.exports = function(messenger, opts) {
 
 }(this.applitude || this));
 
-},{}],33:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 var pull = require('pull-stream')
 
 module.exports = pull.Source(function (onClose) {
@@ -3643,7 +3354,7 @@ module.exports = pull.Source(function (onClose) {
 })
 
 
-},{"pull-stream":34}],34:[function(require,module,exports){
+},{"pull-stream":31}],31:[function(require,module,exports){
 
 var sources  = require('./sources')
 var sinks    = require('./sinks')
@@ -3671,7 +3382,7 @@ exports.Sink    = exports.pipeableSink   = u.Sink
 
 
 
-},{"./maybe":35,"./sinks":36,"./sources":37,"./throughs":38,"pull-core":27}],35:[function(require,module,exports){
+},{"./maybe":32,"./sinks":34,"./sources":35,"./throughs":36,"pull-core":33}],32:[function(require,module,exports){
 var u = require('pull-core')
 var prop = u.prop
 var id   = u.id
@@ -3729,7 +3440,124 @@ module.exports = function (pull) {
   return exports
 }
 
-},{"pull-core":27}],36:[function(require,module,exports){
+},{"pull-core":33}],33:[function(require,module,exports){
+exports.id = 
+function (item) {
+  return item
+}
+
+exports.prop = 
+function (map) {  
+  if('string' == typeof map) {
+    var key = map
+    return function (data) { return data[key] }
+  }
+  return map
+}
+
+exports.tester = function (test) {
+  if(!test) return exports.id
+  if('object' === typeof test
+    && 'function' === typeof test.test)
+      return test.test.bind(test)
+  return exports.prop(test) || exports.id
+}
+
+exports.addPipe = addPipe
+
+function addPipe(read) {
+  if('function' !== typeof read)
+    return read
+
+  read.pipe = read.pipe || function (reader) {
+    if('function' != typeof reader)
+      throw new Error('must pipe to reader')
+    return addPipe(reader(read))
+  }
+  read.type = 'Source'
+  return read
+}
+
+var Source =
+exports.Source =
+function Source (createRead) {
+  function s() {
+    var args = [].slice.call(arguments)
+    return addPipe(createRead.apply(null, args))
+  }
+  s.type = 'Source'
+  return s
+}
+
+
+var Through =
+exports.Through = 
+function (createRead) {
+  return function () {
+    var args = [].slice.call(arguments)
+    var piped = []
+    function reader (read) {
+      args.unshift(read)
+      read = createRead.apply(null, args)
+      while(piped.length)
+        read = piped.shift()(read)
+      return read
+      //pipeing to from this reader should compose...
+    }
+    reader.pipe = function (read) {
+      piped.push(read) 
+      if(read.type === 'Source')
+        throw new Error('cannot pipe ' + reader.type + ' to Source')
+      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
+      return reader
+    }
+    reader.type = 'Through'
+    return reader
+  }
+}
+
+var Sink =
+exports.Sink = 
+function Sink(createReader) {
+  return function () {
+    var args = [].slice.call(arguments)
+    if(!createReader)
+      throw new Error('must be createReader function')
+    function s (read) {
+      args.unshift(read)
+      return createReader.apply(null, args)
+    }
+    s.type = 'Sink'
+    return s
+  }
+}
+
+
+exports.maybeSink = 
+exports.maybeDrain = 
+function (createSink, cb) {
+  if(!cb)
+    return Through(function (read) {
+      var ended
+      return function (close, cb) {
+        if(close) return read(close, cb)
+        if(ended) return cb(ended)
+
+        createSink(function (err, data) {
+          ended = err || true
+          if(!err) cb(null, data)
+          else     cb(ended)
+        }) (read)
+      }
+    })()
+
+  return Sink(function (read) {
+    return createSink(cb) (read)
+  })()
+}
+
+
+},{}],34:[function(require,module,exports){
 var drain = exports.drain = function (read, op, done) {
 
   ;(function next() {
@@ -3769,7 +3597,7 @@ var log = exports.log = function (read, done) {
 }
 
 
-},{}],37:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 
 var keys = exports.keys =
 function (object) {
@@ -3921,7 +3749,7 @@ function (start, createStream) {
 }
 
 
-},{}],38:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 (function (process){
 var u      = require('pull-core')
 var sources = require('./sources')
@@ -4217,7 +4045,8 @@ function (read, highWaterMark) {
 
 
 }).call(this,require('_process'))
-},{"./sinks":36,"./sources":37,"_process":4,"pull-core":27}],39:[function(require,module,exports){
+
+},{"./sinks":34,"./sources":35,"_process":4,"pull-core":33}],37:[function(require,module,exports){
 var sources  = require('./sources')
 var sinks    = require('./sinks')
 var throughs = require('./throughs')
@@ -4293,7 +4122,7 @@ exports.Sink    = exports.pipeableSink   = u.Sink
 
 
 
-},{"./maybe":40,"./sinks":41,"./sources":42,"./throughs":43,"pull-core":27}],40:[function(require,module,exports){
+},{"./maybe":38,"./sinks":40,"./sources":41,"./throughs":42,"pull-core":39}],38:[function(require,module,exports){
 var u = require('pull-core')
 var prop = u.prop
 var id   = u.id
@@ -4358,7 +4187,9 @@ module.exports = function (pull) {
   return exports
 }
 
-},{"pull-core":27}],41:[function(require,module,exports){
+},{"pull-core":39}],39:[function(require,module,exports){
+arguments[4][33][0].apply(exports,arguments)
+},{"dup":33}],40:[function(require,module,exports){
 var drain = exports.drain = function (read, op, done) {
 
   ;(function next() {
@@ -4400,7 +4231,7 @@ var log = exports.log = function (read, done) {
 }
 
 
-},{}],42:[function(require,module,exports){
+},{}],41:[function(require,module,exports){
 
 var keys = exports.keys =
 function (object) {
@@ -4558,7 +4389,7 @@ function (start, createStream) {
 }
 
 
-},{}],43:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
 (function (process){
 var u      = require('pull-core')
 var sources = require('./sources')
@@ -4889,7 +4720,8 @@ function (read, mapper) {
 
 
 }).call(this,require('_process'))
-},{"./sinks":41,"./sources":42,"_process":4,"pull-core":27}],44:[function(require,module,exports){
+
+},{"./sinks":40,"./sources":41,"_process":4,"pull-core":39}],43:[function(require,module,exports){
 /* jshint node: true */
 'use strict';
 
@@ -5016,7 +4848,7 @@ module.exports = function(signaller, opts) {
   };
 };
 
-},{"./handlers":30,"cog/jsonparse":8}],45:[function(require,module,exports){
+},{"./handlers":27,"cog/jsonparse":8}],44:[function(require,module,exports){
 var extend = require('cog/extend');
 
 /**
@@ -5034,7 +4866,7 @@ module.exports = function(switchboard, opts) {
   }, opts));
 };
 
-},{"cog/extend":6,"messenger-ws":46}],46:[function(require,module,exports){
+},{"cog/extend":6,"messenger-ws":45}],45:[function(require,module,exports){
 var WebSocket = require('ws');
 var wsurl = require('wsurl');
 var ps = require('pull-ws');
@@ -5119,7 +4951,7 @@ module.exports = function(url, opts) {
   return connect;
 };
 
-},{"cog/defaults":5,"pull-ws":47,"ws":51,"wsurl":52}],47:[function(require,module,exports){
+},{"cog/defaults":5,"pull-ws":46,"ws":51,"wsurl":52}],46:[function(require,module,exports){
 exports = module.exports = duplex;
 
 exports.source = require('./source');
@@ -5132,7 +4964,126 @@ function duplex (ws, opts) {
   };
 };
 
-},{"./sink":49,"./source":50}],48:[function(require,module,exports){
+},{"./sink":49,"./source":50}],47:[function(require,module,exports){
+exports.id = 
+function (item) {
+  return item
+}
+
+exports.prop = 
+function (map) {  
+  if('string' == typeof map) {
+    var key = map
+    return function (data) { return data[key] }
+  }
+  return map
+}
+
+exports.tester = function (test) {
+  if(!test) return exports.id
+  if('object' === typeof test
+    && 'function' === typeof test.test)
+      return test.test.bind(test)
+  return exports.prop(test) || exports.id
+}
+
+exports.addPipe = addPipe
+
+function addPipe(read) {
+  if('function' !== typeof read)
+    return read
+
+  read.pipe = read.pipe || function (reader) {
+    if('function' != typeof reader && 'function' != typeof reader.sink)
+      throw new Error('must pipe to reader')
+    var pipe = addPipe(reader.sink ? reader.sink(read) : reader(read))
+    return reader.source || pipe;
+  }
+  
+  read.type = 'Source'
+  return read
+}
+
+var Source =
+exports.Source =
+function Source (createRead) {
+  function s() {
+    var args = [].slice.call(arguments)
+    return addPipe(createRead.apply(null, args))
+  }
+  s.type = 'Source'
+  return s
+}
+
+
+var Through =
+exports.Through = 
+function (createRead) {
+  return function () {
+    var args = [].slice.call(arguments)
+    var piped = []
+    function reader (read) {
+      args.unshift(read)
+      read = createRead.apply(null, args)
+      while(piped.length)
+        read = piped.shift()(read)
+      return read
+      //pipeing to from this reader should compose...
+    }
+    reader.pipe = function (read) {
+      piped.push(read) 
+      if(read.type === 'Source')
+        throw new Error('cannot pipe ' + reader.type + ' to Source')
+      reader.type = read.type === 'Sink' ? 'Sink' : 'Through'
+      return reader
+    }
+    reader.type = 'Through'
+    return reader
+  }
+}
+
+var Sink =
+exports.Sink = 
+function Sink(createReader) {
+  return function () {
+    var args = [].slice.call(arguments)
+    if(!createReader)
+      throw new Error('must be createReader function')
+    function s (read) {
+      args.unshift(read)
+      return createReader.apply(null, args)
+    }
+    s.type = 'Sink'
+    return s
+  }
+}
+
+
+exports.maybeSink = 
+exports.maybeDrain = 
+function (createSink, cb) {
+  if(!cb)
+    return Through(function (read) {
+      var ended
+      return function (close, cb) {
+        if(close) return read(close, cb)
+        if(ended) return cb(ended)
+
+        createSink(function (err, data) {
+          ended = err || true
+          if(!err) cb(null, data)
+          else     cb(ended)
+        }) (read)
+      }
+    })()
+
+  return Sink(function (read) {
+    return createSink(cb) (read)
+  })()
+}
+
+
+},{}],48:[function(require,module,exports){
 module.exports = function(socket, callback) {
   var remove = socket && (socket.removeEventListener || socket.removeListener);
 
@@ -5220,7 +5171,8 @@ module.exports = pull.Sink(function(read, socket, opts) {
 });
 
 }).call(this,require('_process'))
-},{"./ready":48,"_process":4,"pull-core":27}],50:[function(require,module,exports){
+
+},{"./ready":48,"_process":4,"pull-core":47}],50:[function(require,module,exports){
 var pull = require('pull-core');
 var ready = require('./ready');
 
@@ -5297,7 +5249,7 @@ module.exports = pull.Source(function(socket) {
   return read;
 });
 
-},{"./ready":48,"pull-core":27}],51:[function(require,module,exports){
+},{"./ready":48,"pull-core":47}],51:[function(require,module,exports){
 
 /**
  * Module dependencies.
@@ -6105,7 +6057,7 @@ module.exports = function(pc, opts) {
 
     // if a filter has been specified, then apply the filter
     if (typeof sdpFilter == 'function') {
-      desc.sdp = sdpFilter(desc.sdp, pc, methodName);
+      desc.sdp = sdpFilter(desc.sdp, pc);
     }
 
     return desc;
@@ -6192,8 +6144,8 @@ module.exports = function(pc, opts) {
   }
 
   function extractCandidateEventData(data) {
-    // if we have been passed an event, then extract the candidate from the data
-    if (data.srcElement && data.candidate) {
+    // extract nested candidate data (like we will see in an event being passed to this function)
+    while (data && data.candidate && data.candidate.candidate) {
       data = data.candidate;
     }
 
@@ -6215,7 +6167,7 @@ module.exports = function(pc, opts) {
 
     // update known keys to match
     Object.keys(opts || {}).forEach(function(key) {
-      if (allowedKeys[key.toLowerCase]) {
+      if (allowedKeys[key.toLowerCase()]) {
         constraints[allowedKeys[key.toLowerCase()]] = opts[key];
       }
     });
@@ -6330,7 +6282,7 @@ function PriorityQueue(comparator) {
  * @api public
  */
 PriorityQueue.DEFAULT_COMPARATOR = function(a, b) {
-  if (a instanceof Number && b instanceof Number) {
+  if (typeof a === 'number' && typeof b === 'number') {
     return a - b;
   } else {
     a = a.toString();
@@ -6387,11 +6339,11 @@ PriorityQueue.prototype.deq = function() {
     var left = (2 * current) + 1;
     var right = (2 * current) + 2;
 
-    if (left < size && this._compare(left, largest) > 0) {
+    if (left < size && this._compare(left, largest) >= 0) {
       largest = left;
     }
 
-    if (right < size && this._compare(right, largest) > 0) {
+    if (right < size && this._compare(right, largest) >= 0) {
       largest = right;
     }
 
@@ -6418,7 +6370,7 @@ PriorityQueue.prototype.enq = function(element) {
   while (current > 0) {
     var parent = Math.floor((current - 1) / 2);
 
-    if (this._compare(current, parent) < 0) break;
+    if (this._compare(current, parent) <= 0) break;
 
     this._swap(parent, current);
     current = parent;
