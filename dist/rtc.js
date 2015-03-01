@@ -4897,13 +4897,14 @@ module.exports = function(url, opts) {
     var receivedData = false;
     var failTimer;
     var successTimer;
+    var removeListener;
 
     function attemptNext() {
       var socket;
 
       function registerMessage(evt) {
         receivedData = true;
-        (socket.removeEventListener || socket.removeListener)('message', registerMessage);
+        removeListener.call(socket, 'message', registerMessage);
       }
 
       // if we have no more valid endpoints, then erorr out
@@ -4927,6 +4928,7 @@ module.exports = function(url, opts) {
         }, 100);
       });
 
+      removeListener = socket.removeEventListener || socket.removeListener;
       failTimer = setTimeout(attemptNext, timeout);
     }
 
@@ -6131,7 +6133,7 @@ module.exports = function(pc, opts) {
       next.apply(null, [null].concat([].slice.call(arguments)));
     }
 
-    if (typeof fn != 'function') {
+    if (! fn) {
       return next(new Error('cannot call "' + task.name + '" on RTCPeerConnection'));
     }
 
