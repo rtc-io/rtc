@@ -39,7 +39,7 @@ test('receive channel:opened:test events for both connections', function(done) {
     }
   }
 
-  this.timeout(5000);
+  this.timeout(10e3);
 
   connections[0].once('channel:opened:test', function(id, dc) {
     assert.equal(id, connections[1].id);
