@@ -81,13 +81,13 @@ module.exports = function(config) {
   }
 
   return conference;
-}
+};
 
 function flagOwnership(peerId) {
   return function(el) {
     el.dataset.peer = peerId;
   };
-};
+}
 
 function localVideo(qc, config) {
   // use kgo to help with flow control
