@@ -17,7 +17,7 @@ Probably the easiest way to get started with `RTC` is to take it for a testdrive
 
 If you wish to use a specific version, then you can replace `latest` with the version number (from `3.0.1` onwards):
 
-`//cdn.jsdelivr.net/rtc/3.0.1/rtc.min.js`
+`//cdn.jsdelivr.net/rtc/3.2.3/rtc.min.js`
 
 ### Package Managers FTW!
 
@@ -59,7 +59,7 @@ module.exports = {
   },
 
   // use the public switchboard for signalling
-  signaller: '//switchboard.rtc.io',
+  signaller: 'https://switchboard.rtc.io',
 
   // no room is defined by default
   // rtc-quickconnect will autogenerate using a location.hash
@@ -116,7 +116,7 @@ If there is a specific application that you are looking to build with [rtc.io](h
 
 ### Apache 2.0
 
-Copyright 2014 National ICT Australia Limited (NICTA)
+Copyright 2014-2015 National ICT Australia Limited (NICTA)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
