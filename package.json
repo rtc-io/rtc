@@ -27,7 +27,7 @@
   "dependencies": {
     "cog": "^1.0.0",
     "fdom": "^1.0.0",
-    "kgo": "^1.2.0",
+    "kgo": "^2.0.0",
     "rtc-attach": "^2.0.1",
     "rtc-capture": "^1.0.1",
     "rtc-quickconnect": "^4.1.0",
