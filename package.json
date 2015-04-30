@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "browserify": "^9.0.3",
-    "exorcist": "^0.1.6",
+    "exorcist": "^0.3.0",
     "mocha": "^2.1.0",
     "uglify-js": "^2.4.15",
     "uuid": "^2.0.1",
