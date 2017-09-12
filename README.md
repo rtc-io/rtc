@@ -13,11 +13,11 @@ This is a package that will provide you a "one-stop shop" for building WebRTC ap
 
 Probably the easiest way to get started with `RTC` is to take it for a testdrive using [jsbin](http://jsbin.com/dahuka/edit?html,css,js,output). This demo uses the minified JS file (and associated sourcemaps for debugging) from:
 
-`//cdn.jsdelivr.net/rtc/latest/rtc.min.js`
+`//cdn.jsdelivr.net/npm/rtc@latest/dist/rtc.min.js`
 
 If you wish to use a specific version, then you can replace `latest` with the version number (from `3.0.1` onwards):
 
-`//cdn.jsdelivr.net/rtc/3.2.3/rtc.min.js`
+`//cdn.jsdelivr.net/npm/rtc@3.4.0/dist/rtc.min.js`
 
 ### Package Managers FTW!
 
@@ -42,7 +42,7 @@ Establish a connection and render local and remote video feeds.
         <div id="l-video"></div>
     </div>
     <div class="pure-u-4-5" id="r-video"></div>
-<script src="https://cdn.jsdelivr.net/rtc/latest/rtc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/rtc@latest/dist/rtc.min.js"></script>
 </body>
 </html>
 ```
